@@ -1,0 +1,244 @@
+using System;
+using System.Reflection;
+using BepInEx;
+using BepInEx.Configuration;
+using BepInEx.Unity.Mono;
+using HarmonyLib;
+using UnityEngine;
+using UnityEngine.InputSystem;
+
+namespace WalkNWash.VRCompanion
+{
+    [BepInPlugin(Id, "Walk N Wash VR Companion", "0.1.0")]
+    [BepInDependency("com.newunitymodder.unityvrmod", BepInDependency.DependencyFlags.HardDependency)]
+    [DefaultExecutionOrder(30000)]
+    public sealed class Plugin : BaseUnityPlugin
+    {
+        public const string Id = "local.walknwash.vrcompanion";
+        private static Plugin current;
+        private Harmony harmony;
+        private Backend backend;
+        private object manager;
+        private PlayerController player;
+        private LookController look;
+        private LocomotionController locomotion;
+        private ConfigEntry<bool> enabledSetting, headAim, controllers, mouseTurn;
+        private ConfigEntry<float> eyeOffset, deadzone, snapDegrees;
+        private ConfigEntry<Key> recenterKey;
+        private int scheduledFrame = -1, poseFrame = -1;
+        private bool rendering, calibrated, snapLatched, failed;
+        private Vector3 baseline;
+        private Quaternion headRotation = Quaternion.identity;
+        private float rigYaw;
+        private GameObject calibratedRig;
+        private static readonly MethodInfo viewUpdate = AccessTools.Method(typeof(LookController), "ViewUpdate");
+        private static readonly FieldInfo smoothedLook = AccessTools.Field(typeof(LookController), "smoothedLook");
+        private static readonly FieldInfo smoothingVelocity = AccessTools.Field(typeof(LookController), "smoothingVelocity");
+
+        private void Awake()
+        {
+            current = this;
+            enabledSetting = Config.Bind("General", "Enabled", true, "Enable player follow and input integration. Restart after changing this setting.");
+            headAim = Config.Bind("Camera", "Headset Aims Character", true, "Drive game look/aim from headset orientation. Mouse/right stick turn the tracking origin.");
+            eyeOffset = Config.Bind("Camera", "Eye Height Offset", 0f, "Additional eye height in game world units after recentering. Use this instead of UnityVRMod's eye offset.");
+            recenterKey = Config.Bind("Camera", "Recenter Key", Key.F10, "Recalibrate current physical head position to character eyes. Stand or sit comfortably, then press this key.");
+            controllers = Config.Bind("Input", "Enable Controllers", true, "Left stick moves; right stick snap-turns. Keyboard and mouse remain available.");
+            mouseTurn = Config.Bind("Input", "Mouse Turns Body", true, "With headset aim enabled, horizontal mouse/gamepad look turns the VR origin. Vertical look is ignored.");
+            deadzone = Config.Bind("Input", "Stick Deadzone", .2f, new ConfigDescription("Radial movement deadzone.", new AcceptableValueRange<float>(0f, .9f)));
+            snapDegrees = Config.Bind("Input", "Snap Turn Degrees", 30f, new ConfigDescription("One turn per right-stick deflection; release stick to turn again.", new AcceptableValueRange<float>(0f, 90f)));
+            try
+            {
+                harmony = new Harmony(Id);
+                Type managerType = AccessTools.TypeByName("UnityVRMod.Features.VrVisualization.VrVisualizationManager");
+                Patch(managerType, "Update", nameof(ManagerPrefix), null);
+                int count = 0;
+                foreach (string name in new[] { "OpenXR", "OpenVR" })
+                {
+                    Type type = AccessTools.TypeByName("UnityVRMod.Features.VrVisualization.VrCameraSetup_Core" + name);
+                    if (type == null) continue;
+                    Patch(type, "InitializeVr", null, nameof(Initialized));
+                    Patch(type, "UpdatePoses", nameof(Schedule), null);
+                    Patch(type, "RenderEye", nameof(BeforeEye), null);
+                    Patch(type, "TeardownVr", nameof(BeforeTeardown), null);
+                    count++;
+                }
+                if (count == 0) throw new InvalidOperationException("No supported UnityVRMod backend found");
+                Patch(typeof(PlayerController), "Update", nameof(PlayerPrefix), nameof(PlayerPostfix));
+                Patch(typeof(LookController), "LateUpdate", null, nameof(LookPostfix));
+                Logger.LogInfo("Companion ready. F10 recenters; left stick moves; right stick snap-turns.");
+            }
+            catch (Exception e)
+            {
+                failed = true;
+                harmony?.UnpatchSelf();
+                Logger.LogError("Companion disabled: incompatible game/mod hooks. " + e);
+            }
+        }
+
+        private void Patch(Type type, string method, string prefix, string postfix)
+        {
+            MethodInfo original = type == null ? null : AccessTools.Method(type, method);
+            if (original == null) throw new MissingMethodException(type?.FullName, method);
+            harmony.Patch(original,
+                prefix == null ? null : new HarmonyMethod(typeof(Plugin), prefix),
+                postfix == null ? null : new HarmonyMethod(typeof(Plugin), postfix));
+        }
+
+        private bool Enabled => !failed && enabledSetting.Value;
+        private bool VrActive => Enabled && backend != null && backend.Rig != null && manager != null
+            && !(bool)Backend.Field(manager, "_isUserSafeModeActive")
+            && Time.time >= Convert.ToSingle(Backend.Field(manager, "_autoSafeModeEndTime"));
+        private bool CanControl => VrActive && calibrated && calibratedRig == backend.Rig && player != null && player.isActiveAndEnabled
+            && look != null && locomotion != null && backend.Focused
+            && !locomotion.HasCutscene && !locomotion.IsInteracting
+            && MenuManager.actions != null && MenuManager.actions.Player.Move.enabled
+            && (GameStateManager.Instance == null || !GameStateManager.Instance.IsPaused);
+
+        private void BindPlayer(PlayerController value)
+        {
+            if (player == value) return;
+            player = value;
+            look = value.GetComponent<LookController>();
+            locomotion = value.GetComponent<LocomotionController>();
+            calibrated = false;
+        }
+
+        private static void ManagerPrefix(object __instance)
+        {
+            if (current != null) current.manager = __instance;
+        }
+        private static void Initialized(object __instance, bool __result)
+        {
+            if (current == null || !current.Enabled || !__result) return;
+            current.Guard(() =>
+            {
+                current.backend?.Dispose();
+                current.backend = new Backend(__instance, message => current.Logger.LogInfo(message));
+                current.calibrated = false;
+                if (current.controllers.Value) current.backend.InitializeInput();
+            });
+        }
+        private static bool Schedule(object __instance)
+        {
+            if (current == null || !current.Enabled || current.backend == null || current.backend.Setup != __instance) return true;
+            if (current.rendering) return true;
+            current.scheduledFrame = Time.frameCount;
+            return false;
+        }
+        private void LateUpdate()
+        {
+            if (!Enabled) return;
+            Guard(() =>
+            {
+                if (Keyboard.current != null && Keyboard.current[recenterKey.Value].wasPressedThisFrame)
+                    calibrated = false;
+                if (scheduledFrame != Time.frameCount || !VrActive) return;
+                rendering = true;
+                try { backend.Render(); }
+                finally { rendering = false; }
+            });
+        }
+        private static void BeforeEye(object __instance)
+        {
+            if (current == null || !current.Enabled || current.backend?.Setup != __instance) return;
+            current.Guard(current.UpdateOrigin);
+        }
+        private void UpdateOrigin()
+        {
+            if (poseFrame == Time.frameCount) return;
+            poseFrame = Time.frameCount;
+            if (player == null || !player.isActiveAndEnabled || look == null) return;
+            if (!backend.HeadPose(out var head, out var rotation)) return;
+            var rig = backend.Rig;
+            if (rig == null) return;
+            headRotation = rotation;
+            if (!calibrated || calibratedRig != rig)
+            {
+                baseline = head;
+                rigYaw = look.LookYaw - rotation.eulerAngles.y;
+                calibrated = true;
+                calibratedRig = rig;
+                Logger.LogInfo("Camera calibrated to player eyes. Backend: " + (backend.IsOpenXr ? "OpenXR" : "OpenVR") + "; physical head: " + head);
+            }
+            Vector3 anchor = LookController.GetLookPosition() + Vector3.up * eyeOffset.Value;
+            ControlMath.Origin(anchor.x, anchor.y, anchor.z, baseline.x, baseline.y, baseline.z,
+                rigYaw, rig.transform.localScale.x, out float x, out float y, out float z);
+            rig.transform.SetPositionAndRotation(new Vector3(x, y, z), Quaternion.Euler(0, rigYaw, 0));
+        }
+        private static void PlayerPrefix(PlayerController __instance)
+        {
+            if (current == null || !current.Enabled) return;
+            current.Guard(() =>
+            {
+                current.BindPlayer(__instance);
+                if (current.CanControl && current.headAim.Value) current.ApplyAim();
+            });
+        }
+        private static void PlayerPostfix(PlayerController __instance)
+        {
+            if (current == null || !current.Enabled) return;
+            current.Guard(() =>
+            {
+                if (!current.CanControl) { current.snapLatched = false; return; }
+                if (current.headAim.Value)
+                {
+                    if (current.mouseTurn.Value) current.rigYaw += current.look.LookInput.x;
+                    current.look.LookInput = Vector2.zero;
+                    smoothedLook.SetValue(current.look, Vector2.zero);
+                    smoothingVelocity.SetValue(current.look, Vector2.zero);
+                }
+                if (!current.controllers.Value) return;
+                current.backend.Poll();
+                current.rigYaw += ControlMath.Snap(current.backend.Turn.x, current.snapDegrees.Value, ref current.snapLatched);
+                ControlMath.Deadzone(current.backend.Move.x, current.backend.Move.y, current.deadzone.Value, out var x, out var y);
+                if (x != 0 || y != 0)
+                {
+                    float heading = current.rigYaw + current.headRotation.eulerAngles.y;
+                    current.locomotion.MoveInput = Quaternion.Euler(0, heading, 0) * new Vector3(x, 0, y);
+                }
+            });
+        }
+        private void ApplyAim()
+        {
+            Quaternion world = Quaternion.Euler(0, rigYaw, 0) * headRotation;
+            Vector3 euler = world.eulerAngles;
+            LookController.SetLookRotation(Quaternion.Euler(euler.x, euler.y, 0));
+        }
+        private static void LookPostfix(LookController __instance)
+        {
+            if (current == null || !current.Enabled || current.look != __instance) return;
+            current.Guard(() =>
+            {
+                if (!current.CanControl || !current.headAim.Value) return;
+                current.ApplyAim();
+                viewUpdate.Invoke(__instance, null);
+            });
+        }
+        private static void BeforeTeardown(object __instance)
+        {
+            if (current == null || current.backend?.Setup != __instance) return;
+            current.Guard(() =>
+            {
+                current.backend.Dispose();
+                current.backend = null;
+                current.calibrated = false;
+                current.scheduledFrame = -1;
+            });
+        }
+        private void Guard(Action action)
+        {
+            try { action(); }
+            catch (Exception e)
+            {
+                failed = true;
+                Logger.LogError("Companion stopped after error; original VR rendering resumes. " + e);
+            }
+        }
+        private void OnDestroy()
+        {
+            backend?.Dispose();
+            harmony?.UnpatchSelf();
+            if (current == this) current = null;
+        }
+    }
+}

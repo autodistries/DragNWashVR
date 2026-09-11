@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <GameDir Condition="'$(GameDir)' == ''">$(MSBuildProjectDirectory)/../..</GameDir>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Checks.cs" />
+    <Compile Include="../src/ControlMath.cs" Link="ControlMath.cs" />
+    <Compile Include="../src/OpenXrNative.cs" Link="OpenXrNative.cs" />
+    <Reference Include="$(GameDir)/BepInEx/core/Mono.Cecil.dll" Private="true" />
+  </ItemGroup>
+</Project>
