@@ -33,24 +33,32 @@ namespace WalkNWash.VRCompanion
             return method != null && (bool)method.Invoke(system, null);
         }
 
-        private Vector2 Read(int hand)
+        private Vector2 Read(int hand, out float trigger)
         {
+            trigger = 0;
             uint index = (uint)role.Invoke(system, new[] { Enum.ToObject(roleType, hand) });
             if (index == uint.MaxValue) return Vector2.zero;
             object[] args = { index, Activator.CreateInstance(stateType), (uint)Marshal.SizeOf(stateType) };
             if (!(bool)state.Invoke(system, args)) return Vector2.zero;
             int axis = 0;
+            int triggerAxis = -1;
             for (int i = 0; i < 5; i++)
             {
                 object[] propArgs = { index, Enum.ToObject(propertyType, 3002 + i), Enum.ToObject(errorType, 0) };
                 int axisType = (int)property.Invoke(system, propArgs);
-                if (Convert.ToInt32(propArgs[2]) == 0 && axisType == 2) { axis = i; break; }
+                if (Convert.ToInt32(propArgs[2]) != 0) continue;
+                if (axisType == 2) axis = i;
+                if (axisType == 3) triggerAxis = i;
             }
+            trigger = triggerAxis >= 0
+                ? Convert.ToSingle(Backend.Field(Backend.Field(args[1], "rAxis" + triggerAxis), "x"))
+                : (Convert.ToUInt64(Backend.Field(args[1], "ulButtonPressed")) & (1UL << 33)) != 0 ? 1 : 0;
             object value = Backend.Field(args[1], "rAxis" + axis);
             return new Vector2(Convert.ToSingle(Backend.Field(value, "x")), Convert.ToSingle(Backend.Field(value, "y")));
         }
 
-        public void Poll(out Vector2 move, out Vector2 turn) { move = Read(1); turn = Read(2); }
+        public void Poll(out Vector2 move, out Vector2 turn, out float leftTrigger, out float rightTrigger)
+        { move = Read(1, out leftTrigger); turn = Read(2, out rightTrigger); }
         public void Dispose() { }
     }
 }

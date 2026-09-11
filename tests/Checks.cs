@@ -87,6 +87,18 @@ internal static class Checks
         Near(ControlMath.SmoothTurn(1, .2f, 90, 1f / 45) * 45, 90, "45 Hz turn speed");
         Near(ControlMath.SmoothTurn(-.6f, .2f, 90, 1f / 90), -.5f, "proportional left turn");
         Near(ControlMath.SmoothTurn(1, .2f, 90, 5), 9, "long frame cannot cause giant turn");
+        var trigger = new TriggerButton();
+        Assert(!trigger.Update(1, true), "held trigger on startup does not click");
+        Assert(!trigger.Update(0, true), "neutral arms trigger");
+        Assert(trigger.Update(.8f, true), "trigger press");
+        Assert(trigger.Update(.5f, true), "trigger hysteresis holds between thresholds");
+        Assert(!trigger.Update(.3f, true), "trigger release");
+        Assert(trigger.Update(.8f, true), "trigger can press again");
+        Assert(!trigger.Update(.8f, false), "focus/menu loss releases trigger");
+        Assert(!trigger.Update(.8f, true), "focus return requires physical release");
+        trigger.Update(0, true);
+        Assert(trigger.Update(1, true), "trigger works after focus return and release");
+        Assert(!trigger.Update(float.NaN, true), "invalid trigger releases action");
 
         ControlMath.Origin(10, 2, 20, .4f, 1.7f, -.2f, 0, 1, out x, out y, out var z);
         Near(x + .4f, 10, "calibration x aligns to player");
@@ -107,11 +119,13 @@ internal static class Checks
         Size<SetList>(32); Offset<SetList>("sets", 24);
         Size<ActiveSet>(16); Size<GetInfo>(32);
         Size<VectorState>(48); Offset<VectorState>("lastChangeTime", 32); Offset<VectorState>("isActive", 40);
+        Size<FloatState>(40); Offset<FloatState>("lastChangeTime", 24); Offset<FloatState>("isActive", 32);
 
         string game = Path.GetFullPath(args.Length == 0 ? ".." : args[0]);
         using (var module = ModuleDefinition.ReadModule(Path.Combine(game, "DragNWash_Data/Managed/Assembly-CSharp.dll")))
         {
             Method(Type(module, "PlayerController"), "Update", 0, "System.Void");
+            Method(Type(module, "AutoInputSwitcher"), "OnDeviceChanged", 2, "System.Void");
             var look = Type(module, "LookController");
             Method(look, "LateUpdate", 0, "System.Void");
             Method(look, "ViewUpdate", 0, "System.Void");

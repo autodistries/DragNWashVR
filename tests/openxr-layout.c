@@ -17,4 +17,7 @@ _Static_assert(sizeof(XrActionStateGetInfo) == 32, "GetInfo");
 _Static_assert(sizeof(XrActionStateVector2f) == 48, "VectorState");
 _Static_assert(offsetof(XrActionStateVector2f, lastChangeTime) == 32, "lastChangeTime");
 _Static_assert(offsetof(XrActionStateVector2f, isActive) == 40, "isActive");
+_Static_assert(sizeof(XrActionStateFloat) == 40, "FloatState");
+_Static_assert(offsetof(XrActionStateFloat, lastChangeTime) == 24, "float lastChangeTime");
+_Static_assert(offsetof(XrActionStateFloat, isActive) == 32, "float isActive");
 int main(void) { return 0; }

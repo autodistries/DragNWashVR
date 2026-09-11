@@ -8,6 +8,7 @@
   <ItemGroup>
     <Compile Include="Checks.cs" />
     <Compile Include="../src/ControlMath.cs" Link="ControlMath.cs" />
+    <Compile Include="../src/TriggerButton.cs" Link="TriggerButton.cs" />
     <Compile Include="../src/OpenXrNative.cs" Link="OpenXrNative.cs" />
     <Reference Include="$(GameDir)/BepInEx/core/Mono.Cecil.dll" Private="true" />
   </ItemGroup>

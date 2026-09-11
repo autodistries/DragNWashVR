@@ -22,12 +22,15 @@ updates its player and eye anchor.
 - **F10** recenters: your current physical head position becomes the character's
   eye position. Use it while sitting or standing comfortably.
 - **F11** remains UnityVRMod's VR/safe-mode toggle.
+- **Right trigger** performs the game's left-click action: interact with an object,
+  or hold to reach/use the hand. **Left trigger** performs its right-click action.
 - Keyboard movement, gamepad movement, and existing interaction keys remain
-  available. VR button bindings, tracked hands, and motion-controlled interactions
-  are not implemented in this version.
+  available. These trigger bindings operate the game's existing hand/tool animations;
+  tracked controller poses, free-moving hands, and VR menu clicking are not implemented.
 
-Controller movement and character aim respect the game's disabled input actions,
-pause state, interactions, cutscenes, and VR focus. The headset view still follows
+Controller movement respects the game's interaction lock. Headset aiming and
+trigger release remain active while using a hand/tool. Inputs respect disabled
+game actions, pause state, cutscenes, and VR focus. The headset view still follows
 the player during cutscenes; this build does not reproduce cinematic camera paths.
 Physical leaning moves the viewpoint, not the game's collision capsule, so leaning
 through walls remains possible. Player meshes are not hidden automatically.
@@ -78,7 +81,10 @@ protonize --prefix yiff DragNWash.exe -force-d3d11
 4. Turn and lean physically. The viewpoint should rotate and translate; character
    aim should follow headset direction during normal gameplay.
 5. Test left-stick movement and continuous right-stick turning, then release both sticks.
-6. Open a menu and switch VR off/on. Input should stop appropriately, and a rebuilt
+6. Look at an interactable and squeeze the right trigger. Also hold/release it away
+   from an interactable to test the existing hand action. Test the left trigger's
+   secondary action. Release triggers before re-enabling VR or returning from a menu.
+7. Open a menu and switch VR off/on. Input should stop appropriately, and a rebuilt
    rig should recalibrate when rendering resumes.
 
 Camera follow, visual comfort, and hardware input still require an in-headset
@@ -112,8 +118,8 @@ player anchor; the game's own look controller supplies that anchor.
 
 ## Input implementation
 
-OpenXR attaches a movement/turn action set to UnityVRMod's existing session, then
-syncs vector actions while focused. Suggested profiles are Oculus Touch, Valve
+OpenXR attaches movement, turn, and trigger actions to UnityVRMod's existing session,
+then syncs them while focused. Suggested profiles are Oculus Touch, Valve
 Index, Microsoft motion controllers, and Vive trackpads. Runtime profile emulation
 may support other controllers. Attachment failure is logged and leaves camera
 follow enabled. No second OpenXR instance or session is created.
@@ -125,6 +131,10 @@ trackpads. This depends on the runtime's legacy input emulation, including xrize
 The game has Unity Input System movement bindings, but the mod's native VR session
 does not provide Unity XR devices. The companion supplies movement directly to the
 existing `LocomotionController.MoveInput` while retaining the normal keyboard path.
+Triggers feed a custom Unity Input System device bound to `Player.Plap` and
+`Player.Attack`. This preserves the game's normal performed/canceled callbacks and
+held-button behavior without generating desktop mouse events. Triggers use separate
+press/release thresholds and must return to neutral after focus or VR is lost.
 
 ## Validation and troubleshooting
 

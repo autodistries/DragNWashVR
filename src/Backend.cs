@@ -15,6 +15,7 @@ namespace WalkNWash.VRCompanion
         private readonly Action<string> log;
         private int pollFrame = -1;
         internal Vector2 Move, Turn;
+        internal float LeftTrigger, RightTrigger;
         private static readonly Dictionary<string, FieldInfo> fields = new Dictionary<string, FieldInfo>();
 
         internal Backend(object setup, Action<string> log)
@@ -63,13 +64,16 @@ namespace WalkNWash.VRCompanion
             if (pollFrame == Time.frameCount) return;
             pollFrame = Time.frameCount;
             Move = Turn = Vector2.zero;
+            LeftTrigger = RightTrigger = 0;
             if (input == null || !Focused) return;
-            try { input.Poll(out Move, out Turn); }
+            try { input.Poll(out Move, out Turn, out LeftTrigger, out RightTrigger); }
             catch (Exception e)
             {
                 log("Controller polling stopped: " + e.Message);
                 input.Dispose();
                 input = null;
+                Move = Turn = Vector2.zero;
+                LeftTrigger = RightTrigger = 0;
             }
         }
 
@@ -112,6 +116,6 @@ namespace WalkNWash.VRCompanion
 
     internal interface IControllerInput : IDisposable
     {
-        void Poll(out Vector2 move, out Vector2 turn);
+        void Poll(out Vector2 move, out Vector2 turn, out float leftTrigger, out float rightTrigger);
     }
 }

@@ -67,6 +67,17 @@ namespace WalkNWash.VRCompanion
             internal uint isActive;
         }
 
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct FloatState
+        {
+            internal int type;
+            internal IntPtr next;
+            internal float value;
+            internal uint changedSinceLastSync;
+            internal long lastChangeTime;
+            internal uint isActive;
+        }
+
         [UnmanagedFunctionPointer(CallingConvention.Winapi)]
         internal delegate int GetProc(ulong instance, [MarshalAs(UnmanagedType.LPStr)] string name, out IntPtr pointer);
         [UnmanagedFunctionPointer(CallingConvention.Winapi)]
@@ -81,6 +92,8 @@ namespace WalkNWash.VRCompanion
         internal delegate int SetOperation(ulong session, ref SetList info);
         [UnmanagedFunctionPointer(CallingConvention.Winapi)]
         internal delegate int ReadVector(ulong session, ref GetInfo info, ref VectorState state);
+        [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+        internal delegate int ReadFloat(ulong session, ref GetInfo info, ref FloatState state);
         [UnmanagedFunctionPointer(CallingConvention.Winapi)]
         internal delegate int DestroySet(ulong set);
 

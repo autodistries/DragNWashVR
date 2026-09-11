@@ -6,6 +6,7 @@ using BepInEx.Unity.Mono;
 using HarmonyLib;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.LowLevel;
 
 namespace WalkNWash.VRCompanion
 {
@@ -22,6 +23,8 @@ namespace WalkNWash.VRCompanion
         private PlayerController player;
         private LookController look;
         private LocomotionController locomotion;
+        private ActionButtons actionButtons;
+        private bool buttonInputFailed;
         private ConfigEntry<bool> enabledSetting, headAim, controllers, mouseTurn, smoothTurning;
         private ConfigEntry<float> eyeOffset, deadzone, snapDegrees, turnSpeed;
         private ConfigEntry<Key> recenterKey;
@@ -67,6 +70,9 @@ namespace WalkNWash.VRCompanion
                 if (count == 0) throw new InvalidOperationException("No supported UnityVRMod backend found");
                 Patch(typeof(PlayerController), "Update", nameof(PlayerPrefix), nameof(PlayerPostfix));
                 Patch(typeof(LookController), "LateUpdate", null, nameof(LookPostfix));
+                Patch(typeof(AutoInputSwitcher), "OnDeviceChanged", nameof(DeviceChanged), null);
+                actionButtons = new ActionButtons();
+                InputSystem.onBeforeUpdate += BeforeInputUpdate;
                 Logger.LogInfo("Companion ready. F10 recenters; left stick moves; right stick turns.");
             }
             catch (Exception e)
@@ -90,11 +96,33 @@ namespace WalkNWash.VRCompanion
         private bool VrActive => Enabled && backend != null && backend.Rig != null && manager != null
             && !(bool)Backend.Field(manager, "_isUserSafeModeActive")
             && Time.time >= Convert.ToSingle(Backend.Field(manager, "_autoSafeModeEndTime"));
-        private bool CanControl => VrActive && calibrated && calibratedRig == backend.Rig && player != null && player.isActiveAndEnabled
+        private bool ControllerContext => VrActive && calibrated && calibratedRig == backend.Rig && player != null && player.isActiveAndEnabled
             && look != null && locomotion != null && backend.Focused
-            && !locomotion.HasCutscene && !locomotion.IsInteracting
-            && MenuManager.actions != null && MenuManager.actions.Player.Move.enabled
+            && !locomotion.HasCutscene
             && (GameStateManager.Instance == null || !GameStateManager.Instance.IsPaused);
+        private bool CanAim => ControllerContext && MenuManager.actions.Player.Look.enabled;
+        private bool CanControl => ControllerContext && !locomotion.IsInteracting && MenuManager.actions.Player.Move.enabled;
+
+        // A virtual device must not trigger the game's hardware hotplug pause handler.
+        private static bool DeviceChanged(InputDevice device) => !(device is CompanionButtons);
+
+        private void BeforeInputUpdate()
+        {
+            if (InputState.currentUpdateType == InputUpdateType.BeforeRender || actionButtons == null || buttonInputFailed) return;
+            try
+            {
+                bool usable = Enabled && controllers.Value && ControllerContext;
+                if (usable) backend.Poll();
+                actionButtons.Update(MenuManager.actions, usable ? backend.LeftTrigger : 0,
+                    usable ? backend.RightTrigger : 0, usable);
+            }
+            catch (Exception e)
+            {
+                buttonInputFailed = true;
+                actionButtons.Release();
+                Logger.LogError("Trigger input stopped; camera and sticks remain active. " + e);
+            }
+        }
 
         private void BindPlayer(PlayerController value)
         {
@@ -173,7 +201,7 @@ namespace WalkNWash.VRCompanion
             current.Guard(() =>
             {
                 current.BindPlayer(__instance);
-                if (current.CanControl && current.headAim.Value) current.ApplyAim();
+                if (current.CanAim && current.headAim.Value) current.ApplyAim();
             });
         }
         private static void PlayerPostfix(PlayerController __instance)
@@ -181,7 +209,7 @@ namespace WalkNWash.VRCompanion
             if (current == null || !current.Enabled) return;
             current.Guard(() =>
             {
-                if (!current.CanControl) { current.snapLatched = false; return; }
+                if (!current.CanAim) { current.snapLatched = false; return; }
                 if (current.headAim.Value)
                 {
                     if (current.mouseTurn.Value) current.rigYaw += current.look.LookInput.x;
@@ -189,7 +217,7 @@ namespace WalkNWash.VRCompanion
                     smoothedLook.SetValue(current.look, Vector2.zero);
                     smoothingVelocity.SetValue(current.look, Vector2.zero);
                 }
-                if (!current.controllers.Value) return;
+                if (!current.controllers.Value || !current.CanControl) { current.snapLatched = false; return; }
                 current.backend.Poll();
                 if (current.smoothTurning.Value)
                 {
@@ -217,7 +245,7 @@ namespace WalkNWash.VRCompanion
             if (current == null || !current.Enabled || current.look != __instance) return;
             current.Guard(() =>
             {
-                if (!current.CanControl || !current.headAim.Value) return;
+                if (!current.CanAim || !current.headAim.Value) return;
                 current.ApplyAim();
                 viewUpdate.Invoke(__instance, null);
             });
@@ -228,6 +256,7 @@ namespace WalkNWash.VRCompanion
             current.Guard(() =>
             {
                 current.backend.Dispose();
+                current.actionButtons?.Release();
                 current.backend = null;
                 current.calibrated = false;
                 current.scheduledFrame = -1;
@@ -239,11 +268,14 @@ namespace WalkNWash.VRCompanion
             catch (Exception e)
             {
                 failed = true;
+                actionButtons?.Release();
                 Logger.LogError("Companion stopped after error; original VR rendering resumes. " + e);
             }
         }
         private void OnDestroy()
         {
+            InputSystem.onBeforeUpdate -= BeforeInputUpdate;
+            actionButtons?.Dispose();
             backend?.Dispose();
             harmony?.UnpatchSelf();
             if (current == this) current = null;
