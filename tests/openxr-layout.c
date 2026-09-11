@@ -20,4 +20,10 @@ _Static_assert(offsetof(XrActionStateVector2f, isActive) == 40, "isActive");
 _Static_assert(sizeof(XrActionStateFloat) == 40, "FloatState");
 _Static_assert(offsetof(XrActionStateFloat, lastChangeTime) == 24, "float lastChangeTime");
 _Static_assert(offsetof(XrActionStateFloat, isActive) == 32, "float isActive");
+_Static_assert(sizeof(XrActionStateBoolean) == 40, "BooleanState");
+_Static_assert(offsetof(XrActionStateBoolean, currentState) == 16, "boolean currentState");
+_Static_assert(offsetof(XrActionStateBoolean, lastChangeTime) == 24, "boolean lastChangeTime");
+_Static_assert(offsetof(XrActionStateBoolean, isActive) == 32, "boolean isActive");
+_Static_assert(XR_TYPE_ACTION_STATE_BOOLEAN == 23, "boolean structure type");
+_Static_assert(XR_ACTION_TYPE_BOOLEAN_INPUT == 1, "boolean action type");
 int main(void) { return 0; }

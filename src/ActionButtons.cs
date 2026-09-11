@@ -15,6 +15,7 @@ namespace WalkNWash.VRCompanion
         public FourCC format => new FourCC('W', 'V', 'R', 'B');
         [InputControl(name = "primary", layout = "Button", bit = 0)]
         [InputControl(name = "secondary", layout = "Button", bit = 1)]
+        [InputControl(name = "jump", layout = "Button", bit = 2)]
         public uint buttons;
     }
 
@@ -24,11 +25,13 @@ namespace WalkNWash.VRCompanion
         public CompanionButtons() { }
         public ButtonControl primary { get; private set; }
         public ButtonControl secondary { get; private set; }
+        public ButtonControl jump { get; private set; }
         protected override void FinishSetup()
         {
             base.FinishSetup();
             primary = GetChildControl<ButtonControl>("primary");
             secondary = GetChildControl<ButtonControl>("secondary");
+            jump = GetChildControl<ButtonControl>("jump");
         }
     }
 
@@ -38,9 +41,10 @@ namespace WalkNWash.VRCompanion
     {
         private readonly CompanionButtons device;
         private InputSystem_Actions bound;
-        private TriggerButton primary, secondary;
+        private TriggerButton primary, secondary, jump;
         private const string PrimaryPath = "<CompanionButtons>/primary";
         private const string SecondaryPath = "<CompanionButtons>/secondary";
+        private const string JumpPath = "<CompanionButtons>/jump";
 
         internal ActionButtons()
         {
@@ -57,7 +61,7 @@ namespace WalkNWash.VRCompanion
                 if (add)
                 {
                     if (!action.bindings.Any(b => b.path == path))
-                        action.AddBinding(new InputBinding { path = path, groups = groups, name = "VR trigger" });
+                        action.AddBinding(new InputBinding { path = path, groups = groups, name = "VR button" });
                 }
                 else
                 {
@@ -68,7 +72,7 @@ namespace WalkNWash.VRCompanion
             finally { if (enabled) action.Enable(); }
         }
 
-        internal void Update(InputSystem_Actions actions, float left, float right, bool enabled)
+        internal void Update(InputSystem_Actions actions, float left, float right, bool jumpPressed, bool enabled)
         {
             if (!ReferenceEquals(bound, actions))
             {
@@ -77,6 +81,7 @@ namespace WalkNWash.VRCompanion
                 string groups = string.Join(";", actions.controlSchemes.Select(s => s.bindingGroup));
                 Binding(actions.Player.Plap, PrimaryPath, groups, true);
                 Binding(actions.Player.Attack, SecondaryPath, groups, true);
+                Binding(actions.Player.Jump, JumpPath, groups, true);
             }
             // Preserve explicit device filters, adding only this companion's device.
             var allowed = actions.devices;
@@ -84,6 +89,7 @@ namespace WalkNWash.VRCompanion
                 actions.devices = allowed.Value.Concat(new InputDevice[] { device }).ToArray();
             uint state = primary.Update(right, enabled && actions.Player.Plap.enabled) ? 1u : 0u;
             if (secondary.Update(left, enabled && actions.Player.Attack.enabled)) state |= 2;
+            if (jump.Update(jumpPressed ? 1 : 0, enabled && actions.Player.Jump.enabled)) state |= 4;
             InputSystem.QueueStateEvent(device, new CompanionButtonState { buttons = state });
         }
 
@@ -91,6 +97,7 @@ namespace WalkNWash.VRCompanion
         {
             primary.Update(0, false);
             secondary.Update(0, false);
+            jump.Update(0, false);
             if (device.added) InputState.Change(device, new CompanionButtonState());
         }
 
@@ -100,6 +107,7 @@ namespace WalkNWash.VRCompanion
             Release();
             Binding(bound.Player.Plap, PrimaryPath, null, false);
             Binding(bound.Player.Attack, SecondaryPath, null, false);
+            Binding(bound.Player.Jump, JumpPath, null, false);
             var allowed = bound.devices;
             if (allowed.HasValue) bound.devices = allowed.Value.Where(d => d != device).ToArray();
             bound = null;

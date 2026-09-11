@@ -11,6 +11,8 @@ that rig with the player. This plugin anchors the rig to the game's
 translation and rotation. Rendering is deferred to late update, after the game
 updates its player and eye anchor.
 
+Current work and pending headset checks: [TODO.md](TODO.md). Keep one task active.
+
 ## Features and controls
 
 - First-person camera follows the player, with a calibrated physical head origin.
@@ -22,6 +24,8 @@ updates its player and eye anchor.
 - **F10** recenters: your current physical head position becomes the character's
   eye position. Use it while sitting or standing comfortably.
 - **F11** remains UnityVRMod's VR/safe-mode toggle.
+- **Right controller A** jumps using `Player.Jump`, the same action as desktop
+  Space. Press, hold, and release follow the game's normal jump behavior.
 - **Right trigger** performs the game's left-click action: interact with an object,
   or hold to reach/use the hand. **Left trigger** performs its right-click action.
 - A world-space **Right trigger / Interact** hint appears above the game's selected
@@ -87,12 +91,14 @@ protonize --prefix yiff DragNWash.exe -force-d3d11
    Squeeze the right trigger. Also hold/release it away
    from an interactable to test the existing hand action. Test the left trigger's
    secondary action. Release triggers before re-enabling VR or returning from a menu.
-7. Open a menu and switch VR off/on. Input should stop appropriately, and a rebuilt
+7. Press/hold/release right A to test jumping, then release and press again.
+8. Open a menu and switch VR off/on. Input should stop appropriately, and a rebuilt
    rig should recalibrate when rendering resumes.
 
 The initial camera follow, headset aim, movement, snap turn, and recentering were
 confirmed working by the user. Version 0.2.0's smooth turn, trigger actions, and
-world-space interaction prompt still require an in-headset test.
+world-space interaction prompt, plus version 0.2.1's A-button jump, still require
+an in-headset test (headset battery currently depleted).
 Automated checks do not prove that a given game renderer or controller
 profile works correctly at runtime. In particular, if the world stays attached
 to the headset despite physical head rotation, that is a separate pose/rendering
@@ -141,6 +147,14 @@ Triggers feed a custom Unity Input System device bound to `Player.Plap` and
 `Player.Attack`. This preserves the game's normal performed/canceled callbacks and
 held-button behavior without generating desktop mouse events. Triggers use separate
 press/release thresholds and must return to neutral after focus or VR is lost.
+
+Right A uses a third button on that device bound to `Player.Jump`. OpenXR binds
+`/user/hand/right/input/a/click` for Oculus Touch and Valve Index profiles; existing
+Vive/Microsoft motion-controller profiles do not get an unsupported A binding.
+OpenVR reads `k_EButton_A` from the right controller's pressed-button mask. Runtime
+legacy input emulation must expose that button. No alternative jump button is
+assigned to controllers without A. Like triggers, A must be released after resuming
+VR/focus or re-enabling the jump action before another press is accepted.
 
 ## Interaction UI
 

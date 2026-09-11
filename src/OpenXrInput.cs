@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using UnityEngine;
 using static WalkNWash.VRCompanion.OpenXrNative;
@@ -8,13 +9,14 @@ namespace WalkNWash.VRCompanion
     internal sealed class OpenXrInput : IControllerInput
     {
         private readonly ulong instance, session;
-        private ulong set, moveAction, turnAction, leftTriggerAction, rightTriggerAction;
+        private ulong set, moveAction, turnAction, leftTriggerAction, rightTriggerAction, jumpAction;
         private readonly GetProc getProc;
         private readonly StringToPath toPath;
         private readonly CreateAction createAction;
         private readonly SetOperation sync;
         private readonly ReadVector read;
         private readonly ReadFloat readFloat;
+        private readonly ReadBoolean readBoolean;
         private readonly DestroySet destroy;
         private NativeArray<ActiveSet> active;
 
@@ -32,6 +34,7 @@ namespace WalkNWash.VRCompanion
             sync = Load<SetOperation>("xrSyncActions");
             read = Load<ReadVector>("xrGetActionStateVector2f");
             readFloat = Load<ReadFloat>("xrGetActionStateFloat");
+            readBoolean = Load<ReadBoolean>("xrGetActionStateBoolean");
             destroy = Load<DestroySet>("xrDestroyActionSet");
             try
             {
@@ -41,19 +44,26 @@ namespace WalkNWash.VRCompanion
                 turnAction = Create("turn", "Turn", 3);
                 leftTriggerAction = Create("secondary", "Secondary action", 2);
                 rightTriggerAction = Create("primary", "Interact or use hand", 2);
+                jumpAction = Create("jump", "Jump", 1);
                 var suggest = Load<Suggest>("xrSuggestInteractionProfileBindings");
                 string[] profiles = { "oculus/touch_controller", "valve/index_controller", "microsoft/motion_controller", "htc/vive_controller" };
                 int accepted = 0;
                 foreach (string profile in profiles)
                 {
                     string axis = profile.StartsWith("htc/") ? "trackpad" : "thumbstick";
-                    using (var bindings = new NativeArray<Binding>(
+                    var profileBindings = new List<Binding> {
                         new Binding { action = moveAction, path = Path("/user/hand/left/input/" + axis) },
                         new Binding { action = turnAction, path = Path("/user/hand/right/input/" + axis) },
                         new Binding { action = leftTriggerAction, path = Path("/user/hand/left/input/trigger/value") },
-                        new Binding { action = rightTriggerAction, path = Path("/user/hand/right/input/trigger/value") }))
+                        new Binding { action = rightTriggerAction, path = Path("/user/hand/right/input/trigger/value") }
+                    };
+                    // Only profiles with an A button get this binding. An invalid
+                    // path would reject the entire profile, including the sticks.
+                    string jumpPath = JumpBinding.OpenXrPath(profile);
+                    if (jumpPath != null) profileBindings.Add(new Binding { action = jumpAction, path = Path(jumpPath) });
+                    using (var bindings = new NativeArray<Binding>(profileBindings.ToArray()))
                     {
-                        var suggested = new SuggestedBindings { type = 51, profile = Path("/interaction_profiles/" + profile), count = 4, bindings = bindings.Pointer };
+                        var suggested = new SuggestedBindings { type = 51, profile = Path("/interaction_profiles/" + profile), count = (uint)profileBindings.Count, bindings = bindings.Pointer };
                         int result = suggest(instance, ref suggested);
                         if (result >= 0) accepted++;
                         else log("OpenXR binding profile skipped: " + profile + " (" + result + ")");
@@ -103,10 +113,18 @@ namespace WalkNWash.VRCompanion
             Check(readFloat(session, ref info, ref state), "xrGetActionStateFloat");
             return state.isActive != 0 ? state.value : 0;
         }
-        public void Poll(out Vector2 move, out Vector2 turn, out float leftTrigger, out float rightTrigger)
+        private bool ReadJump()
+        {
+            var info = new GetInfo { type = 58, action = jumpAction };
+            var state = new BooleanState { type = 23 };
+            Check(readBoolean(session, ref info, ref state), "xrGetActionStateBoolean");
+            return state.isActive != 0 && state.value != 0;
+        }
+        public void Poll(out Vector2 move, out Vector2 turn, out float leftTrigger, out float rightTrigger, out bool jump)
         {
             move = turn = Vector2.zero;
             leftTrigger = rightTrigger = 0;
+            jump = false;
             var info = new SetList { type = 61, count = 1, sets = active.Pointer };
             int result = sync(session, ref info);
             if (result == 8) return; // XR_SESSION_NOT_FOCUSED: release all input.
@@ -115,6 +133,7 @@ namespace WalkNWash.VRCompanion
             turn = Read(turnAction);
             leftTrigger = ReadTrigger(leftTriggerAction);
             rightTrigger = ReadTrigger(rightTriggerAction);
+            jump = ReadJump();
         }
         public void Dispose()
         {

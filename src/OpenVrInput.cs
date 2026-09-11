@@ -33,13 +33,15 @@ namespace WalkNWash.VRCompanion
             return method != null && (bool)method.Invoke(system, null);
         }
 
-        private Vector2 Read(int hand, out float trigger)
+        private Vector2 Read(int hand, out float trigger, out bool jump)
         {
             trigger = 0;
+            jump = false;
             uint index = (uint)role.Invoke(system, new[] { Enum.ToObject(roleType, hand) });
             if (index == uint.MaxValue) return Vector2.zero;
             object[] args = { index, Activator.CreateInstance(stateType), (uint)Marshal.SizeOf(stateType) };
             if (!(bool)state.Invoke(system, args)) return Vector2.zero;
+            jump = JumpBinding.OpenVrPressed(hand, Convert.ToUInt64(Backend.Field(args[1], "ulButtonPressed")));
             int axis = 0;
             int triggerAxis = -1;
             for (int i = 0; i < 5; i++)
@@ -57,8 +59,8 @@ namespace WalkNWash.VRCompanion
             return new Vector2(Convert.ToSingle(Backend.Field(value, "x")), Convert.ToSingle(Backend.Field(value, "y")));
         }
 
-        public void Poll(out Vector2 move, out Vector2 turn, out float leftTrigger, out float rightTrigger)
-        { move = Read(1, out leftTrigger); turn = Read(2, out rightTrigger); }
+        public void Poll(out Vector2 move, out Vector2 turn, out float leftTrigger, out float rightTrigger, out bool jump)
+        { move = Read(1, out leftTrigger, out _); turn = Read(2, out rightTrigger, out jump); }
         public void Dispose() { }
     }
 }

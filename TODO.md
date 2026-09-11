@@ -4,11 +4,11 @@ Keep one implementation task active. Commit completed changes separately. Finish
 the pending headset checks before expanding into more UI or tracked-hand work.
 An implemented feature is not hardware-verified until the user tests it.
 
-## Active
+## Current focus
 
-- [ ] Add right-controller **A → Player.Jump** (same game action as desktop Space).
-  Preserve hold/release behavior, keyboard bindings, and focus/menu gating. Build,
-  run offline checks, install, and commit. Headset test will follow later.
+No implementation task active. Version 0.2.1 is built and installed; 143 offline
+checks and the independent OpenXR ABI check passed. Next task: run the headset
+validation below, then fix the first reported failure before adding features.
 
 ## Next: headset validation
 
@@ -36,6 +36,8 @@ Fix failures from this list before starting the backlog. Record backend and rele
 
 ## Implemented, awaiting headset validation
 
+- [x] Right-controller **A → Player.Jump** (same game action as desktop Space),
+  with hold/release behavior and focus/menu gating. OpenXR and OpenVR implemented.
 - [x] Configurable continuous right-stick turning; snap mode remains optional.
 - [x] Trigger bindings through the game's input actions.
 - [x] World-space interaction prompt for VR.

@@ -10,7 +10,7 @@ using UnityEngine.InputSystem.LowLevel;
 
 namespace WalkNWash.VRCompanion
 {
-    [BepInPlugin(Id, "Walk N Wash VR Companion", "0.2.0")]
+    [BepInPlugin(Id, "Walk N Wash VR Companion", "0.2.1")]
     [BepInDependency("com.newunitymodder.unityvrmod", BepInDependency.DependencyFlags.HardDependency)]
     [DefaultExecutionOrder(30000)]
     public sealed class Plugin : BaseUnityPlugin
@@ -120,13 +120,13 @@ namespace WalkNWash.VRCompanion
                 bool usable = Enabled && controllers.Value && ControllerContext;
                 if (usable) backend.Poll();
                 actionButtons.Update(MenuManager.actions, usable ? backend.LeftTrigger : 0,
-                    usable ? backend.RightTrigger : 0, usable);
+                    usable ? backend.RightTrigger : 0, usable && backend.Jump, usable);
             }
             catch (Exception e)
             {
                 buttonInputFailed = true;
                 actionButtons.Release();
-                Logger.LogError("Trigger input stopped; camera and sticks remain active. " + e);
+                Logger.LogError("Button input stopped; camera and sticks remain active. " + e);
             }
         }
 

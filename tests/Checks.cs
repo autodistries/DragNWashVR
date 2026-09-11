@@ -3,6 +3,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 using Mono.Cecil;
 using WalkNWash.VRCompanion;
 using static WalkNWash.VRCompanion.OpenXrNative;
@@ -63,6 +64,8 @@ internal static class Checks
             Assert(Convert.ToInt32(axisEnum.Fields.Single(f => f.Name == "k_eControllerAxis_Joystick").Constant) == 2, "OpenVR joystick enum");
             var props = Type(module, "ETrackedDeviceProperty");
             Assert(Convert.ToInt32(props.Fields.Single(f => f.Name == "Prop_Axis0Type_Int32").Constant) == 3002, "OpenVR axis property enum");
+            Assert(Convert.ToInt32(Type(module, "EVRButtonId").Fields.Single(f => f.Name == "k_EButton_A").Constant)
+                == JumpBinding.OpenVrButtonA, "OpenVR A button enum matches installed mod");
         }
         Console.WriteLine("Hook signatures verified: " + setup.Name);
     }
@@ -100,6 +103,25 @@ internal static class Checks
         trigger.Update(0, true);
         Assert(trigger.Update(1, true), "trigger works after focus return and release");
         Assert(!trigger.Update(float.NaN, true), "invalid trigger releases action");
+        Assert(JumpBinding.OpenXrPath("oculus/touch_controller") == "/user/hand/right/input/a/click", "Touch right A binding");
+        Assert(JumpBinding.OpenXrPath("valve/index_controller") == "/user/hand/right/input/a/click", "Index right A binding");
+        Assert(JumpBinding.OpenXrPath("microsoft/motion_controller") == null, "no invalid A path for motion controllers");
+        Assert(JumpBinding.OpenXrPath("htc/vive_controller") == null, "no invalid A path for Vive wands");
+        Assert(JumpBinding.OpenVrPressed(2, 1UL << 7), "OpenVR right A jumps");
+        Assert(!JumpBinding.OpenVrPressed(1, 1UL << 7), "OpenVR left A cannot jump");
+        Assert(!JumpBinding.OpenVrPressed(2, 1UL << 33), "OpenVR trigger cannot jump");
+        Assert(!JumpBinding.OpenVrPressed(2, 0), "OpenVR released A clears jump");
+        var jump = new TriggerButton();
+        Assert(!jump.Update(1, true), "A held at startup ignored");
+        jump.Update(0, true);
+        Assert(jump.Update(1, true), "A press asserts jump");
+        Assert(jump.Update(1, true), "A hold keeps game action held");
+        Assert(!jump.Update(0, true), "A release clears jump");
+        Assert(jump.Update(1, true), "second A press jumps again");
+        Assert(!jump.Update(1, false), "disabled jump action releases A");
+        Assert(!jump.Update(1, true), "A held across menu/focus resume ignored");
+        jump.Update(0, true);
+        Assert(jump.Update(1, true), "A rearmed after physical release");
 
         ControlMath.Origin(10, 2, 20, .4f, 1.7f, -.2f, 0, 1, out x, out y, out var z);
         Near(x + .4f, 10, "calibration x aligns to player");
@@ -121,11 +143,22 @@ internal static class Checks
         Size<ActiveSet>(16); Size<GetInfo>(32);
         Size<VectorState>(48); Offset<VectorState>("lastChangeTime", 32); Offset<VectorState>("isActive", 40);
         Size<FloatState>(40); Offset<FloatState>("lastChangeTime", 24); Offset<FloatState>("isActive", 32);
+        Size<BooleanState>(40); Offset<BooleanState>("value", 16);
+        Offset<BooleanState>("lastChangeTime", 24); Offset<BooleanState>("isActive", 32);
 
         string game = Path.GetFullPath(args.Length == 0 ? ".." : args[0]);
         using (var module = ModuleDefinition.ReadModule(Path.Combine(game, "DragNWash_Data/Managed/Assembly-CSharp.dll")))
         {
             Method(Type(module, "PlayerController"), "Update", 0, "System.Void");
+            Method(Type(module, "PlayerController"), "OnJumpAction", 1, "System.Void");
+            var input = Type(module, "InputSystem_Actions");
+            string actionJson = input.Methods.Single(m => m.IsConstructor && !m.IsStatic).Body.Instructions
+                .Select(i => i.Operand as string).First(s => s != null && s.Contains("\"maps\""));
+            using var actions = JsonDocument.Parse(actionJson);
+            var playerMap = actions.RootElement.GetProperty("maps").EnumerateArray().Single(m => m.GetProperty("name").GetString() == "Player");
+            Assert(playerMap.GetProperty("bindings").EnumerateArray().Any(b =>
+                b.GetProperty("action").GetString() == "Jump" && b.GetProperty("path").GetString() == "<Keyboard>/space"),
+                "Jump is the same game action as desktop Space");
             Method(Type(module, "AutoInputSwitcher"), "OnDeviceChanged", 2, "System.Void");
             Method(Type(module, "UiPrompt"), "ShowPrompt", 1, "System.Void");
             Method(Type(module, "UiPrompt"), "HidePrompt", 0, "System.Void");
