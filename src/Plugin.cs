@@ -10,7 +10,7 @@ using UnityEngine.InputSystem.LowLevel;
 
 namespace WalkNWash.VRCompanion
 {
-    [BepInPlugin(Id, "Walk N Wash VR Companion", "0.1.0")]
+    [BepInPlugin(Id, "Walk N Wash VR Companion", "0.2.0")]
     [BepInDependency("com.newunitymodder.unityvrmod", BepInDependency.DependencyFlags.HardDependency)]
     [DefaultExecutionOrder(30000)]
     public sealed class Plugin : BaseUnityPlugin
@@ -25,6 +25,9 @@ namespace WalkNWash.VRCompanion
         private LocomotionController locomotion;
         private ActionButtons actionButtons;
         private bool buttonInputFailed;
+        private readonly VrPrompt prompt = new VrPrompt();
+        private bool promptFailed;
+        private ConfigEntry<bool> showPrompt;
         private ConfigEntry<bool> enabledSetting, headAim, controllers, mouseTurn, smoothTurning;
         private ConfigEntry<float> eyeOffset, deadzone, snapDegrees, turnSpeed;
         private ConfigEntry<Key> recenterKey;
@@ -51,6 +54,7 @@ namespace WalkNWash.VRCompanion
             snapDegrees = Config.Bind("Input", "Snap Turn Degrees", 30f, new ConfigDescription("One turn per right-stick deflection; release stick to turn again.", new AcceptableValueRange<float>(0f, 90f)));
             smoothTurning = Config.Bind("Input", "Smooth Turning", true, "Use continuous right-stick turning. Disable to use Snap Turn Degrees instead.");
             turnSpeed = Config.Bind("Input", "Smooth Turn Speed", 90f, new ConfigDescription("Degrees per second at full right-stick deflection.", new AcceptableValueRange<float>(0f, 360f)));
+            showPrompt = Config.Bind("UI", "Show Interaction Prompt", true, "Display a world-space interaction hint in VR. Other desktop UI is unchanged.");
             try
             {
                 harmony = new Harmony(Id);
@@ -63,7 +67,7 @@ namespace WalkNWash.VRCompanion
                     if (type == null) continue;
                     Patch(type, "InitializeVr", null, nameof(Initialized));
                     Patch(type, "UpdatePoses", nameof(Schedule), null);
-                    Patch(type, "RenderEye", nameof(BeforeEye), null);
+                    Patch(type, "RenderEye", nameof(BeforeEye), nameof(AfterEye));
                     Patch(type, "TeardownVr", nameof(BeforeTeardown), null);
                     count++;
                 }
@@ -71,6 +75,8 @@ namespace WalkNWash.VRCompanion
                 Patch(typeof(PlayerController), "Update", nameof(PlayerPrefix), nameof(PlayerPostfix));
                 Patch(typeof(LookController), "LateUpdate", null, nameof(LookPostfix));
                 Patch(typeof(AutoInputSwitcher), "OnDeviceChanged", nameof(DeviceChanged), null);
+                Patch(typeof(UiPrompt), "ShowPrompt", null, nameof(PromptShown));
+                Patch(typeof(UiPrompt), "HidePrompt", null, nameof(PromptHidden));
                 actionButtons = new ActionButtons();
                 InputSystem.onBeforeUpdate += BeforeInputUpdate;
                 Logger.LogInfo("Companion ready. F10 recenters; left stick moves; right stick turns.");
@@ -165,14 +171,30 @@ namespace WalkNWash.VRCompanion
                 if (scheduledFrame != Time.frameCount || !VrActive) return;
                 rendering = true;
                 try { backend.Render(); }
-                finally { rendering = false; }
+                finally { rendering = false; prompt.EndEye(); }
             });
         }
         private static void BeforeEye(object __instance)
         {
             if (current == null || !current.Enabled || current.backend?.Setup != __instance) return;
             current.Guard(current.UpdateOrigin);
+            if (current.promptFailed) return;
+            try
+            {
+                current.prompt.BeginEye(current.backend,
+                    current.showPrompt.Value && current.ControllerContext && MenuManager.actions.Player.Plap.enabled,
+                    current.controllers.Value && !current.buttonInputFailed);
+            }
+            catch (Exception e)
+            {
+                current.promptFailed = true;
+                current.prompt.EndEye();
+                current.Logger.LogError("VR interaction prompt disabled; other controls remain active. " + e);
+            }
         }
+        private static void AfterEye() { current?.prompt.EndEye(); }
+        private static void PromptShown(Vector3 __0) { current?.prompt.Show(__0); }
+        private static void PromptHidden() { current?.prompt.Hide(); }
         private void UpdateOrigin()
         {
             if (poseFrame == Time.frameCount) return;
@@ -256,6 +278,7 @@ namespace WalkNWash.VRCompanion
             current.Guard(() =>
             {
                 current.backend.Dispose();
+                current.prompt.Hide();
                 current.actionButtons?.Release();
                 current.backend = null;
                 current.calibrated = false;
@@ -275,6 +298,7 @@ namespace WalkNWash.VRCompanion
         private void OnDestroy()
         {
             InputSystem.onBeforeUpdate -= BeforeInputUpdate;
+            prompt.Dispose();
             actionButtons?.Dispose();
             backend?.Dispose();
             harmony?.UnpatchSelf();

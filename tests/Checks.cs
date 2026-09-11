@@ -36,6 +36,7 @@ internal static class Checks
         Method(setup, "TeardownVr", 0, "System.Void");
         Assert(setup.Methods.Any(m => m.Name == "RenderEye"), setup.Name + ".RenderEye");
         Field(setup, "_vrRig", "UnityEngine.GameObject");
+        Field(setup, "_leftVrCamera", "UnityEngine.Camera");
         if (setup.Name.EndsWith("OpenXR"))
         {
             Field(setup, "_xrInstance", "System.UInt64");
@@ -126,6 +127,9 @@ internal static class Checks
         {
             Method(Type(module, "PlayerController"), "Update", 0, "System.Void");
             Method(Type(module, "AutoInputSwitcher"), "OnDeviceChanged", 2, "System.Void");
+            Method(Type(module, "UiPrompt"), "ShowPrompt", 1, "System.Void");
+            Method(Type(module, "UiPrompt"), "HidePrompt", 0, "System.Void");
+            Method(Type(module, "Interactable"), "GetCachedInteractable", 0, "Interactable");
             var look = Type(module, "LookController");
             Method(look, "LateUpdate", 0, "System.Void");
             Method(look, "ViewUpdate", 0, "System.Void");

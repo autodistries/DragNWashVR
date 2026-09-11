@@ -24,6 +24,8 @@ updates its player and eye anchor.
 - **F11** remains UnityVRMod's VR/safe-mode toggle.
 - **Right trigger** performs the game's left-click action: interact with an object,
   or hold to reach/use the hand. **Left trigger** performs its right-click action.
+- A world-space **Right trigger / Interact** hint appears above the game's selected
+  interactable in VR. Hand-based targets say **Use hand**. The desktop hint remains.
 - Keyboard movement, gamepad movement, and existing interaction keys remain
   available. These trigger bindings operate the game's existing hand/tool animations;
   tracked controller poses, free-moving hands, and VR menu clicking are not implemented.
@@ -81,14 +83,17 @@ protonize --prefix yiff DragNWash.exe -force-d3d11
 4. Turn and lean physically. The viewpoint should rotate and translate; character
    aim should follow headset direction during normal gameplay.
 5. Test left-stick movement and continuous right-stick turning, then release both sticks.
-6. Look at an interactable and squeeze the right trigger. Also hold/release it away
+6. Look at an interactable: a **Right trigger** label should appear in the headset.
+   Squeeze the right trigger. Also hold/release it away
    from an interactable to test the existing hand action. Test the left trigger's
    secondary action. Release triggers before re-enabling VR or returning from a menu.
 7. Open a menu and switch VR off/on. Input should stop appropriately, and a rebuilt
    rig should recalibrate when rendering resumes.
 
-Camera follow, visual comfort, and hardware input still require an in-headset
-test. Automated checks do not prove that a given game renderer or controller
+The initial camera follow, headset aim, movement, snap turn, and recentering were
+confirmed working by the user. Version 0.2.0's smooth turn, trigger actions, and
+world-space interaction prompt still require an in-headset test.
+Automated checks do not prove that a given game renderer or controller
 profile works correctly at runtime. In particular, if the world stays attached
 to the headset despite physical head rotation, that is a separate pose/rendering
 issue; camera follow alone will not fix it.
@@ -110,6 +115,7 @@ Edit it while the game is closed.
 | Smooth Turning | true | Continuous turning; disable for snap turns |
 | Smooth Turn Speed | 90 | Degrees per second at full stick deflection |
 | Snap Turn Degrees | 30 | Turn angle per right-stick deflection |
+| Show Interaction Prompt | true | World-space interaction label in VR |
 
 Use this plugin's eye-height offset instead of UnityVRMod's eye-height/scene-pose
 offsets during gameplay: the companion controls the rig's position. UnityVRMod's
@@ -135,6 +141,18 @@ Triggers feed a custom Unity Input System device bound to `Player.Plap` and
 `Player.Attack`. This preserves the game's normal performed/canceled callbacks and
 held-button behavior without generating desktop mouse events. Triggers use separate
 press/release thresholds and must return to neutral after focus or VR is lost.
+
+## Interaction UI
+
+The original `UiPrompt` uses `Camera.main.WorldToScreenPoint` and desktop pixel
+coordinates. Those screen overlays do not appear in the mod's eye render textures.
+The companion mirrors its show/hide signals into a separate world-space label,
+displayed only during the VR eye render passes. The label tracks the same target
+the game selects; it does not make out-of-range objects interactable.
+
+This fixes the interaction hint specifically. It does not convert the remaining
+desktop menus, dialogue, progress bars, or HUD into VR, and does not add a VR pointer
+for menu clicking. Existing desktop mouse and keyboard controls remain available.
 
 ## Validation and troubleshooting
 
