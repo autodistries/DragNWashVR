@@ -17,8 +17,8 @@ updates its player and eye anchor.
 - Headset direction drives character look/aim. Horizontal mouse or gamepad look
   turns the tracking origin; vertical mouse look is ignored in this mode.
 - Left VR thumbstick moves relative to headset heading.
-- Right VR thumbstick snap-turns by 30 degrees. Return the stick to neutral before
-  turning again.
+- Right VR thumbstick turns continuously, up to 90 degrees per second. Set
+  `Smooth Turning = false` to use 30-degree snap turns instead.
 - **F10** recenters: your current physical head position becomes the character's
   eye position. Use it while sitting or standing comfortably.
 - **F11** remains UnityVRMod's VR/safe-mode toggle.
@@ -77,7 +77,7 @@ protonize --prefix yiff DragNWash.exe -force-d3d11
 3. Walk using the keyboard. The viewpoint should follow the character's eyes.
 4. Turn and lean physically. The viewpoint should rotate and translate; character
    aim should follow headset direction during normal gameplay.
-5. Test left-stick movement and right-stick snap turns, then release both sticks.
+5. Test left-stick movement and continuous right-stick turning, then release both sticks.
 6. Open a menu and switch VR off/on. Input should stop appropriately, and a rebuilt
    rig should recalibrate when rendering resumes.
 
@@ -101,6 +101,8 @@ Edit it while the game is closed.
 | Enable Controllers | true | Enable VR thumbstick bindings |
 | Mouse Turns Body | true | Allow horizontal desktop look to turn the rig |
 | Stick Deadzone | 0.2 | Filter thumbstick drift |
+| Smooth Turning | true | Continuous turning; disable for snap turns |
+| Smooth Turn Speed | 90 | Degrees per second at full stick deflection |
 | Snap Turn Degrees | 30 | Turn angle per right-stick deflection |
 
 Use this plugin's eye-height offset instead of UnityVRMod's eye-height/scene-pose

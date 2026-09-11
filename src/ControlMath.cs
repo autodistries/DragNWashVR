@@ -24,6 +24,12 @@ namespace WalkNWash.VRCompanion
             return Math.Sign(x) * degrees;
         }
 
+        internal static float SmoothTurn(float x, float deadzone, float degreesPerSecond, float deltaTime)
+        {
+            Deadzone(x, 0, deadzone, out float amount, out _);
+            return amount * degreesPerSecond * Math.Max(0, Math.Min(.1f, deltaTime));
+        }
+
         // Calibrated tracking-space position maps to the moving character's eye anchor.
         internal static void Origin(float ax, float ay, float az, float bx, float by, float bz,
             float yaw, float scale, out float x, out float y, out float z)

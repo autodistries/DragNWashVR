@@ -82,6 +82,11 @@ internal static class Checks
         Near(ControlMath.Snap(-1, 30, ref latched), 0, "opposite direction requires neutral");
         ControlMath.Snap(0, 30, ref latched);
         Near(ControlMath.Snap(-.8f, 30, ref latched), -30, "snap left after release");
+        Near(ControlMath.SmoothTurn(.1f, .2f, 90, 1f / 90), 0, "turn deadzone");
+        Near(ControlMath.SmoothTurn(1, .2f, 90, 1f / 90) * 90, 90, "90 Hz turn speed");
+        Near(ControlMath.SmoothTurn(1, .2f, 90, 1f / 45) * 45, 90, "45 Hz turn speed");
+        Near(ControlMath.SmoothTurn(-.6f, .2f, 90, 1f / 90), -.5f, "proportional left turn");
+        Near(ControlMath.SmoothTurn(1, .2f, 90, 5), 9, "long frame cannot cause giant turn");
 
         ControlMath.Origin(10, 2, 20, .4f, 1.7f, -.2f, 0, 1, out x, out y, out var z);
         Near(x + .4f, 10, "calibration x aligns to player");

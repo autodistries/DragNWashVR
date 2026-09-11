@@ -22,8 +22,8 @@ namespace WalkNWash.VRCompanion
         private PlayerController player;
         private LookController look;
         private LocomotionController locomotion;
-        private ConfigEntry<bool> enabledSetting, headAim, controllers, mouseTurn;
-        private ConfigEntry<float> eyeOffset, deadzone, snapDegrees;
+        private ConfigEntry<bool> enabledSetting, headAim, controllers, mouseTurn, smoothTurning;
+        private ConfigEntry<float> eyeOffset, deadzone, snapDegrees, turnSpeed;
         private ConfigEntry<Key> recenterKey;
         private int scheduledFrame = -1, poseFrame = -1;
         private bool rendering, calibrated, snapLatched, failed;
@@ -42,10 +42,12 @@ namespace WalkNWash.VRCompanion
             headAim = Config.Bind("Camera", "Headset Aims Character", true, "Drive game look/aim from headset orientation. Mouse/right stick turn the tracking origin.");
             eyeOffset = Config.Bind("Camera", "Eye Height Offset", 0f, "Additional eye height in game world units after recentering. Use this instead of UnityVRMod's eye offset.");
             recenterKey = Config.Bind("Camera", "Recenter Key", Key.F10, "Recalibrate current physical head position to character eyes. Stand or sit comfortably, then press this key.");
-            controllers = Config.Bind("Input", "Enable Controllers", true, "Left stick moves; right stick snap-turns. Keyboard and mouse remain available.");
+            controllers = Config.Bind("Input", "Enable Controllers", true, "Left stick moves; right stick turns. Keyboard and mouse remain available.");
             mouseTurn = Config.Bind("Input", "Mouse Turns Body", true, "With headset aim enabled, horizontal mouse/gamepad look turns the VR origin. Vertical look is ignored.");
             deadzone = Config.Bind("Input", "Stick Deadzone", .2f, new ConfigDescription("Radial movement deadzone.", new AcceptableValueRange<float>(0f, .9f)));
             snapDegrees = Config.Bind("Input", "Snap Turn Degrees", 30f, new ConfigDescription("One turn per right-stick deflection; release stick to turn again.", new AcceptableValueRange<float>(0f, 90f)));
+            smoothTurning = Config.Bind("Input", "Smooth Turning", true, "Use continuous right-stick turning. Disable to use Snap Turn Degrees instead.");
+            turnSpeed = Config.Bind("Input", "Smooth Turn Speed", 90f, new ConfigDescription("Degrees per second at full right-stick deflection.", new AcceptableValueRange<float>(0f, 360f)));
             try
             {
                 harmony = new Harmony(Id);
@@ -65,7 +67,7 @@ namespace WalkNWash.VRCompanion
                 if (count == 0) throw new InvalidOperationException("No supported UnityVRMod backend found");
                 Patch(typeof(PlayerController), "Update", nameof(PlayerPrefix), nameof(PlayerPostfix));
                 Patch(typeof(LookController), "LateUpdate", null, nameof(LookPostfix));
-                Logger.LogInfo("Companion ready. F10 recenters; left stick moves; right stick snap-turns.");
+                Logger.LogInfo("Companion ready. F10 recenters; left stick moves; right stick turns.");
             }
             catch (Exception e)
             {
@@ -189,7 +191,13 @@ namespace WalkNWash.VRCompanion
                 }
                 if (!current.controllers.Value) return;
                 current.backend.Poll();
-                current.rigYaw += ControlMath.Snap(current.backend.Turn.x, current.snapDegrees.Value, ref current.snapLatched);
+                if (current.smoothTurning.Value)
+                {
+                    current.snapLatched = false;
+                    current.rigYaw += ControlMath.SmoothTurn(current.backend.Turn.x, current.deadzone.Value,
+                        current.turnSpeed.Value, Time.unscaledDeltaTime);
+                }
+                else current.rigYaw += ControlMath.Snap(current.backend.Turn.x, current.snapDegrees.Value, ref current.snapLatched);
                 ControlMath.Deadzone(current.backend.Move.x, current.backend.Move.y, current.deadzone.Value, out var x, out var y);
                 if (x != 0 || y != 0)
                 {
