@@ -114,6 +114,28 @@ namespace WalkNWash.VRCompanion
         }
 
         internal void Render() => AccessTools.Method(Setup.GetType(), "UpdatePoses").Invoke(Setup, null);
+        internal bool Aim(out Vector3 position, out Quaternion rotation)
+        {
+            position = Vector3.zero;
+            rotation = Quaternion.identity;
+            if (!Focused) return false;
+            if (input is OpenXrInput xr)
+                return xr.Aim(Convert.ToUInt64(Field(Setup, "_appSpace")),
+                    Convert.ToInt64(Field(Field(Setup, "_xrFrameState"), "predictedDisplayTime")), out position, out rotation);
+            return input is OpenVrInput vr && vr.Aim(Field(Setup, "_trackedPoses") as Array, out position, out rotation);
+        }
+
+        internal static bool TrackedPose(object pose, out Vector3 position, out Quaternion rotation)
+        {
+            position = Vector3.zero;
+            rotation = Quaternion.identity;
+            if (pose == null || !(bool)Field(pose, "bPoseIsValid") || !(bool)Field(pose, "bDeviceIsConnected")) return false;
+            object m = Field(pose, "mDeviceToAbsoluteTracking");
+            position = new Vector3(Number(m, "m3"), Number(m, "m7"), -Number(m, "m11"));
+            rotation = Quaternion.LookRotation(new Vector3(-Number(m, "m2"), -Number(m, "m6"), Number(m, "m10")),
+                new Vector3(Number(m, "m1"), Number(m, "m5"), -Number(m, "m9")));
+            return !(float.IsNaN(position.x) || float.IsNaN(position.y) || float.IsNaN(position.z));
+        }
         public void Dispose() { input?.Dispose(); input = null; }
     }
 

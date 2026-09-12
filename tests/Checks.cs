@@ -45,6 +45,9 @@ internal static class Checks
             Field(setup, "_locatedViews");
             Field(setup, "_locatedViewState");
             Field(setup, "_currentSessionState");
+            Field(setup, "_appSpace", "System.UInt64");
+            Field(setup, "_xrFrameState");
+            Field(Type(module, "XrFrameState"), "predictedDisplayTime", "System.Int64");
             Field(Type(module, "XrViewState"), "viewStateFlags");
             Field(Type(module, "XrView"), "pose");
             Field(Type(module, "XrPosef"), "position");
@@ -149,12 +152,18 @@ internal static class Checks
         Size<FloatState>(40); Offset<FloatState>("lastChangeTime", 24); Offset<FloatState>("isActive", 32);
         Size<BooleanState>(40); Offset<BooleanState>("value", 16);
         Offset<BooleanState>("lastChangeTime", 24); Offset<BooleanState>("isActive", 32);
+        Size<Pose>(28); Size<ActionSpaceInfo>(64); Offset<ActionSpaceInfo>("pose", 32);
+        Size<SpaceLocation>(56); Offset<SpaceLocation>("flags", 16); Offset<SpaceLocation>("pose", 24);
+        Size<PoseState>(24); Offset<PoseState>("isActive", 16);
 
         string game = Path.GetFullPath(args.Length == 0 ? ".." : args[0]);
         using (var module = ModuleDefinition.ReadModule(Path.Combine(game, "DragNWash_Data/Managed/Assembly-CSharp.dll")))
         {
             Method(Type(module, "PlayerController"), "Update", 0, "System.Void");
             Method(Type(module, "PlayerController"), "OnJumpAction", 1, "System.Void");
+            var dialog = Type(module, "DialogCommands");
+            Field(dialog, "_instance"); Field(dialog, "dialogueRunner");
+            Field(dialog, "linePresenter"); Field(dialog, "lineAdvancer");
             var input = Type(module, "InputSystem_Actions");
             string actionJson = input.Methods.Single(m => m.IsConstructor && !m.IsStatic).Body.Instructions
                 .Select(i => i.Operand as string).First(s => s != null && s.Contains("\"maps\""));
@@ -174,6 +183,16 @@ internal static class Checks
             Method(look, "SetLookRotation", 1, "System.Void");
             Field(look, "smoothedLook", "UnityEngine.Vector2");
             Field(look, "smoothingVelocity", "UnityEngine.Vector2");
+        }
+        using (var module = ModuleDefinition.ReadModule(Path.Combine(game, "DragNWash_Data/Managed/YarnSpinner.Unity.dll")))
+        {
+            var advancer = Type(module, "LineAdvancer");
+            Method(advancer, "RequestLineHurryUpInternal", 0, "System.Void");
+            Field(advancer, "frameContentReceived", "System.Int32");
+            var options = Type(module, "OptionsPresenter");
+            foreach (string name in new[] { "canvasGroup", "optionViews", "lastLineText" }) Field(options, name);
+            Field(Type(module, "OptionItem"), "text");
+            Method(Type(module, "OptionItem"), "InvokeOptionSelected", 0, "System.Void");
         }
         string plugins = Path.Combine(game, "BepInEx/plugins");
         foreach (string path in Directory.GetFiles(plugins, "UnityVRMod.dll", SearchOption.AllDirectories))

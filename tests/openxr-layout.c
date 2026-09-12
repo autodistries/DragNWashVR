@@ -26,4 +26,14 @@ _Static_assert(offsetof(XrActionStateBoolean, lastChangeTime) == 24, "boolean la
 _Static_assert(offsetof(XrActionStateBoolean, isActive) == 32, "boolean isActive");
 _Static_assert(XR_TYPE_ACTION_STATE_BOOLEAN == 23, "boolean structure type");
 _Static_assert(XR_ACTION_TYPE_BOOLEAN_INPUT == 1, "boolean action type");
+_Static_assert(sizeof(XrPosef) == 28, "Pose");
+_Static_assert(sizeof(XrActionSpaceCreateInfo) == 64, "ActionSpaceInfo");
+_Static_assert(offsetof(XrActionSpaceCreateInfo, poseInActionSpace) == 32, "action pose");
+_Static_assert(sizeof(XrSpaceLocation) == 56, "SpaceLocation");
+_Static_assert(offsetof(XrSpaceLocation, pose) == 24, "located pose");
+_Static_assert(sizeof(XrActionStatePose) == 24, "PoseState");
+_Static_assert(XR_TYPE_ACTION_SPACE_CREATE_INFO == 38, "action space structure type");
+_Static_assert(XR_TYPE_SPACE_LOCATION == 42, "space location structure type");
+_Static_assert(XR_TYPE_ACTION_STATE_POSE == 27, "pose state structure type");
+_Static_assert(XR_ACTION_TYPE_POSE_INPUT == 4, "pose action type");
 int main(void) { return 0; }

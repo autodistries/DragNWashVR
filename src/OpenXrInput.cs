@@ -10,6 +10,10 @@ namespace WalkNWash.VRCompanion
     {
         private readonly ulong instance, session;
         private ulong set, moveAction, turnAction, leftTriggerAction, rightTriggerAction, jumpAction;
+        private ulong aimAction, aimSpace;
+        private LocateSpace locateSpace;
+        private ReadPose readPose;
+        private DestroySet destroySpace;
         private readonly GetProc getProc;
         private readonly StringToPath toPath;
         private readonly CreateAction createAction;
@@ -45,6 +49,7 @@ namespace WalkNWash.VRCompanion
                 leftTriggerAction = Create("secondary", "Secondary action", 2);
                 rightTriggerAction = Create("primary", "Interact or use hand", 2);
                 jumpAction = Create("jump", "Jump", 1);
+                aimAction = Create("right_aim", "Point at dialogue", 4);
                 var suggest = Load<Suggest>("xrSuggestInteractionProfileBindings");
                 string[] profiles = { "oculus/touch_controller", "valve/index_controller", "microsoft/motion_controller", "htc/vive_controller" };
                 int accepted = 0;
@@ -55,7 +60,8 @@ namespace WalkNWash.VRCompanion
                         new Binding { action = moveAction, path = Path("/user/hand/left/input/" + axis) },
                         new Binding { action = turnAction, path = Path("/user/hand/right/input/" + axis) },
                         new Binding { action = leftTriggerAction, path = Path("/user/hand/left/input/trigger/value") },
-                        new Binding { action = rightTriggerAction, path = Path("/user/hand/right/input/trigger/value") }
+                        new Binding { action = rightTriggerAction, path = Path("/user/hand/right/input/trigger/value") },
+                        new Binding { action = aimAction, path = Path("/user/hand/right/input/aim/pose") }
                     };
                     // Only profiles with an A button get this binding. An invalid
                     // path would reject the entire profile, including the sticks.
@@ -78,6 +84,16 @@ namespace WalkNWash.VRCompanion
                     Check(Load<SetOperation>("xrAttachSessionActionSets")(session, ref attach), "xrAttachSessionActionSets");
                 }
                 active = new NativeArray<ActiveSet>(new ActiveSet { set = set });
+                // Pointer setup may fail independently of existing gameplay input.
+                try
+                {
+                    destroySpace = Load<DestroySet>("xrDestroySpace");
+                    locateSpace = Load<LocateSpace>("xrLocateSpace");
+                    readPose = Load<ReadPose>("xrGetActionStatePose");
+                    var spaceInfo = new ActionSpaceInfo { type = 38, action = aimAction, pose = new OpenXrNative.Pose { qw = 1 } };
+                    Check(Load<CreateSpace>("xrCreateActionSpace")(session, ref spaceInfo, out aimSpace), "xrCreateActionSpace");
+                }
+                catch (Exception e) { log("Dialogue pointer unavailable; gameplay input remains active: " + e.Message); }
             }
             catch { Dispose(); throw; }
         }
@@ -137,9 +153,26 @@ namespace WalkNWash.VRCompanion
         }
         public void Dispose()
         {
+            if (aimSpace != 0) { destroySpace(aimSpace); aimSpace = 0; }
             active?.Dispose();
             active = null;
             if (set != 0) { destroy(set); set = 0; }
+        }
+
+        internal bool Aim(ulong baseSpace, long time, out Vector3 position, out Quaternion rotation)
+        {
+            position = Vector3.zero;
+            rotation = Quaternion.identity;
+            if (aimSpace == 0 || baseSpace == 0 || time <= 0) return false;
+            var info = new GetInfo { type = 58, action = aimAction };
+            var state = new PoseState { type = 27 };
+            if (readPose(session, ref info, ref state) < 0 || state.isActive == 0) return false;
+            var location = new SpaceLocation { type = 42 };
+            if (locateSpace(aimSpace, baseSpace, time, ref location) < 0 || (location.flags & 3) != 3) return false;
+            var p = location.pose;
+            position = new Vector3(p.x, p.y, -p.z);
+            rotation = new Quaternion(p.qx, p.qy, -p.qz, -p.qw);
+            return true;
         }
     }
 }

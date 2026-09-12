@@ -62,5 +62,14 @@ namespace WalkNWash.VRCompanion
         public void Poll(out Vector2 move, out Vector2 turn, out float leftTrigger, out float rightTrigger, out bool jump)
         { move = Read(1, out leftTrigger, out _); turn = Read(2, out rightTrigger, out jump); }
         public void Dispose() { }
+
+        internal bool Aim(Array poses, out Vector3 position, out Quaternion rotation)
+        {
+            position = Vector3.zero;
+            rotation = Quaternion.identity;
+            uint index = (uint)role.Invoke(system, new[] { Enum.ToObject(roleType, 2) });
+            if (poses == null || index >= poses.Length) return false;
+            return Backend.TrackedPose(poses.GetValue((int)index), out position, out rotation);
+        }
     }
 }

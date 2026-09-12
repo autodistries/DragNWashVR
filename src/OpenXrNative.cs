@@ -88,6 +88,42 @@ namespace WalkNWash.VRCompanion
             internal uint isActive;
         }
 
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct Pose
+        {
+            internal float qx, qy, qz, qw, x, y, z;
+        }
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct ActionSpaceInfo
+        {
+            internal int type;
+            internal IntPtr next;
+            internal ulong action, subactionPath;
+            internal Pose pose;
+        }
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct SpaceLocation
+        {
+            internal int type;
+            internal IntPtr next;
+            internal ulong flags;
+            internal Pose pose;
+        }
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct PoseState
+        {
+            internal int type;
+            internal IntPtr next;
+            internal uint isActive;
+        }
+
+        [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+        internal delegate int CreateSpace(ulong session, ref ActionSpaceInfo info, out ulong space);
+        [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+        internal delegate int LocateSpace(ulong space, ulong baseSpace, long time, ref SpaceLocation location);
+        [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+        internal delegate int ReadPose(ulong session, ref GetInfo info, ref PoseState state);
+
         [UnmanagedFunctionPointer(CallingConvention.Winapi)]
         internal delegate int GetProc(ulong instance, [MarshalAs(UnmanagedType.LPStr)] string name, out IntPtr pointer);
         [UnmanagedFunctionPointer(CallingConvention.Winapi)]
