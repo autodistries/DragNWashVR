@@ -49,7 +49,16 @@ namespace WalkNWash.VRCompanion
         internal ActionButtons()
         {
             InputSystem.RegisterLayout<CompanionButtons>();
-            device = InputSystem.AddDevice<CompanionButtons>();
+            var existing = InputSystem.devices.ToArray();
+            try { device = InputSystem.AddDevice<CompanionButtons>(); }
+            catch
+            {
+                // AddDevice can fail after registration (e.g. a hotplug callback).
+                // Remove only devices added by this failed attempt.
+                foreach (var added in InputSystem.devices.ToArray())
+                    if (added is CompanionButtons && !existing.Contains(added)) InputSystem.RemoveDevice(added);
+                throw;
+            }
         }
 
         private static void Binding(InputAction action, string path, string groups, bool add)

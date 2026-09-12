@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Reflection;
 using BepInEx;
 using BepInEx.Configuration;
@@ -10,7 +11,7 @@ using UnityEngine.InputSystem.LowLevel;
 
 namespace WalkNWash.VRCompanion
 {
-    [BepInPlugin(Id, "Walk N Wash VR Companion", "0.2.1")]
+    [BepInPlugin(Id, "Walk N Wash VR Companion", "0.2.2")]
     [BepInDependency("com.newunitymodder.unityvrmod", BepInDependency.DependencyFlags.HardDependency)]
     [DefaultExecutionOrder(30000)]
     public sealed class Plugin : BaseUnityPlugin
@@ -77,8 +78,6 @@ namespace WalkNWash.VRCompanion
                 Patch(typeof(AutoInputSwitcher), "OnDeviceChanged", nameof(DeviceChanged), null);
                 Patch(typeof(UiPrompt), "ShowPrompt", null, nameof(PromptShown));
                 Patch(typeof(UiPrompt), "HidePrompt", null, nameof(PromptHidden));
-                actionButtons = new ActionButtons();
-                InputSystem.onBeforeUpdate += BeforeInputUpdate;
                 Logger.LogInfo("Companion ready. F10 recenters; left stick moves; right stick turns.");
             }
             catch (Exception e)
@@ -87,6 +86,40 @@ namespace WalkNWash.VRCompanion
                 harmony?.UnpatchSelf();
                 Logger.LogError("Companion disabled: incompatible game/mod hooks. " + e);
             }
+        }
+
+        private IEnumerator Start()
+        {
+            // BepInEx Awake runs before Unity's input layout globals are ready.
+            // Let Unity finish initialization and one frame before adding a device.
+            yield return null;
+            if (!Enabled || !controllers.Value) yield break;
+            try
+            {
+                actionButtons = new ActionButtons();
+                InputSystem.onBeforeUpdate += BeforeInputUpdate;
+                Logger.LogInfo("VR action buttons ready: triggers and right A.");
+            }
+            catch (Exception e)
+            {
+                buttonInputFailed = true;
+                Logger.LogError("VR action buttons unavailable; camera, F10 and sticks remain active. " + e);
+            }
+#if VR_COMPANION_SMOKE_TEST
+            if (RuntimeSmoke.Requested)
+            {
+                // Exercise the production input callback before injecting test input.
+                yield return null;
+                InputSystem.onBeforeUpdate -= BeforeInputUpdate;
+                RuntimeSmoke.Run(actionButtons, !failed && !buttonInputFailed, Logger);
+            }
+#endif
+        }
+
+        private void ReleaseButtons()
+        {
+            try { actionButtons?.Release(); }
+            catch (Exception e) { Logger.LogWarning("Button release failed: " + e.Message); }
         }
 
         private void Patch(Type type, string method, string prefix, string postfix)
@@ -125,7 +158,7 @@ namespace WalkNWash.VRCompanion
             catch (Exception e)
             {
                 buttonInputFailed = true;
-                actionButtons.Release();
+                ReleaseButtons();
                 Logger.LogError("Button input stopped; camera and sticks remain active. " + e);
             }
         }
@@ -279,7 +312,7 @@ namespace WalkNWash.VRCompanion
             {
                 current.backend.Dispose();
                 current.prompt.Hide();
-                current.actionButtons?.Release();
+                current.ReleaseButtons();
                 current.backend = null;
                 current.calibrated = false;
                 current.scheduledFrame = -1;
@@ -291,7 +324,7 @@ namespace WalkNWash.VRCompanion
             catch (Exception e)
             {
                 failed = true;
-                actionButtons?.Release();
+                ReleaseButtons();
                 Logger.LogError("Companion stopped after error; original VR rendering resumes. " + e);
             }
         }
@@ -299,10 +332,17 @@ namespace WalkNWash.VRCompanion
         {
             InputSystem.onBeforeUpdate -= BeforeInputUpdate;
             prompt.Dispose();
-            actionButtons?.Dispose();
-            backend?.Dispose();
-            harmony?.UnpatchSelf();
-            if (current == this) current = null;
+            try { actionButtons?.Dispose(); }
+            catch (Exception e) { Logger.LogWarning("Button cleanup failed: " + e.Message); }
+            finally
+            {
+                try { backend?.Dispose(); }
+                finally
+                {
+                    harmony?.UnpatchSelf();
+                    if (current == this) current = null;
+                }
+            }
         }
     }
 }

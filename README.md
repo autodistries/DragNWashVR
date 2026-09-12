@@ -96,9 +96,11 @@ protonize --prefix yiff DragNWash.exe -force-d3d11
    rig should recalibrate when rendering resumes.
 
 The initial camera follow, headset aim, movement, snap turn, and recentering were
-confirmed working by the user. Version 0.2.0's smooth turn, trigger actions, and
-world-space interaction prompt, plus version 0.2.1's A-button jump, still require
-an in-headset test (headset battery currently depleted).
+confirmed working by the user in v0.1.0. The user reported that v0.2.0 and v0.2.1
+disabled all companion controls at startup. Version 0.2.2 fixes that input-device
+initialization failure and passes headless Unity device/action checks. Recovery
+in the headset, smooth turn, trigger actions, the world-space interaction prompt,
+and A-button jump still require an in-headset test.
 Automated checks do not prove that a given game renderer or controller
 profile works correctly at runtime. In particular, if the world stays attached
 to the headset despite physical head rotation, that is a separate pose/rendering
@@ -147,6 +149,9 @@ Triggers feed a custom Unity Input System device bound to `Player.Plap` and
 `Player.Attack`. This preserves the game's normal performed/canceled callbacks and
 held-button behavior without generating desktop mouse events. Triggers use separate
 press/release thresholds and must return to neutral after focus or VR is lost.
+Device creation is deferred until one frame after Unity calls `Start`, because
+BepInEx `Awake` runs before the input layout globals are ready in this game.
+Device creation and button-update failures are isolated from camera/stick hooks.
 
 Right A uses a third button on that device bound to `Player.Jump`. OpenXR binds
 `/user/hand/right/input/a/click` for Oculus Touch and Valve Index profiles; existing
@@ -182,9 +187,24 @@ structure layouts, and hook signatures in the actual game and available mod DLLs
 (including the local OpenVR/OpenXR ZIP archives). The optional C check validates
 the same structure layouts against installed Khronos OpenXR headers.
 
+An additional, opt-in runtime test lives in `tests/RuntimeSmoke.cs`. Build with
+`dotnet build -c Release -p:SmokeTest=true -o /tmp/walknwash-vr-smoke`, temporarily
+install that DLL after backing up the installed companion, and launch the game
+through the same Proton prefix with `-batchmode -nographics --vr-companion-smoke-test`.
+Close the normal game first and preserve `BepInEx/LogOutput.log` before this run.
+The test lets the production input callback run, then checks the actual startup
+device against the game's input actions: trigger press/hold/release, jump,
+secondary action, focus release, and rearming. It logs `RUNTIME SMOKE PASS` or
+`RUNTIME SMOKE FAIL` and exits. Restore the normal DLL afterward. Normal builds
+exclude this test entirely. This verifies Unity input integration, not native
+controller polling or VR rendering.
+
 Read `BepInEx/LogOutput.log` for `Walk N Wash VR Companion`:
 
 - `Companion ready`: hooks installed.
+- `VR action buttons ready`: deferred Unity device creation succeeded.
+- `VR action buttons unavailable` or `Button input stopped`: trigger/jump input
+  failed; camera, F10, and native stick controls remain active. Save the exception.
 - `thumbstick input attached`: native input initialization succeeded.
 - `Camera calibrated to player eyes`: player anchor and valid head pose found.
 - `Controller input unavailable`: camera follow remains enabled; see the following
