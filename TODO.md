@@ -3,7 +3,22 @@
 Keep one implementation task active. Commit completed changes separately.
 An implemented feature is not hardware-verified until the user tests it.
 
-## Current focus: validate v0.4.1 turn speed and automatic crouch
+## Current focus: controller-driven hands study
+
+Study completed: [design and findings](docs/CONTROLLER_HANDS.md). No hand code
+installed; current build remains v0.4.1. Recommended next implementation: both
+controller poses, then controller-directed left-hand/sponge contact with original
+surface alignment and effects preserved. Idle visuals follow controllers without
+interaction. Finger posing and a visible right-hand model require a rig audit.
+
+- [x] Trace hand/sponge target selection, native contact effects, object selection,
+  tool lifecycle, controller pose access, and finger-tracking requirements.
+- [ ] Inspect live hand/tool hierarchy and model axes; establish pose update order.
+- [ ] Prototype controller-directed left-hand/sponge reach and consistent object
+  targeting. Preserve wrapping, resource use, release, and independent hand state.
+- [ ] Add tracked idle poses and compatible wrist twist; tune near-contact reach.
+
+## Previous build: v0.4.1 validation
 
 Implemented: height-based crouch (enter 75%, exit 85%), proportional vertical
 mapping to kobold height, left X forced crouch/stand, F10 reset to automatic mode.
@@ -53,13 +68,9 @@ Fix the first failing check before expanding scope. Record backend and relevant
 
 - [ ] Inventory other missing UI (inventory, menus); choose one concrete screen next.
 - [ ] General VR menu interaction.
-- [ ] Controller-driven hands/tool aiming (deferred until current UI work passes).
-  Left hand follows left controller; right hand/item follows right controller.
-  Preserve idle hands near body with interaction disabled. Left trigger activates
-  left-hand touch/pet/button interaction; right trigger activates held tools.
-  Replace camera-directed contact rays as well as visible hand poses, so washing
-  requires controller movement rather than head movement. Preserve reach limits,
-  collisions, release behavior, and sponge refill/contact mechanics.
+- [ ] Hand polish after prototype validation: sprayer/nozzle tracking, haptics,
+  finger curl, optional full hand tracking, visible right-hand asset, direct
+  sponge dunking. See the study for prerequisites and order.
 - [ ] Stick-based dialogue selection only if controller pointing proves unsuitable.
 
 ## Confirmed by user

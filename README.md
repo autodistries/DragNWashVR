@@ -12,6 +12,7 @@ translation and rotation. Rendering is deferred to late update, after the game
 updates its player and eye anchor.
 
 Current work and pending headset checks: [TODO.md](TODO.md). Keep one task active.
+Controller-driven hands research: [design and findings](docs/CONTROLLER_HANDS.md).
 
 ## Features and controls
 
