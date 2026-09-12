@@ -35,6 +35,13 @@ Fix the first failing check before expanding scope. Record backend and relevant
 
 ## Backlog: not started
 
+- [ ] Height-driven crouch: compare tracked head height to a calibrated standing
+  baseline; crouch when lowered and stand when raised. Use separate enter/exit
+  thresholds to avoid flicker. Support seated calibration and F10 recentering;
+  do not count the game's own crouch camera offset as physical head movement.
+  Left-controller X must override automatic crouch. Define a clear way to resume
+  automatic mode, and preserve safe posture on tracking loss or blocked headroom.
+
 - [ ] Inventory other missing UI (inventory, menus); choose one concrete screen next.
 - [ ] General VR menu interaction.
 - [ ] Controller-driven hands/tool aiming (deferred until current UI work passes).
