@@ -20,7 +20,7 @@ Current work and pending headset checks: [TODO.md](TODO.md). Keep one task activ
   turns the tracking origin; vertical mouse look is ignored in this mode.
 - Left VR thumbstick moves relative to headset heading, including while using
   either hand/tool. The game retains its slower interaction movement speed.
-- Right VR thumbstick turns continuously, up to 90 degrees per second. Set
+- Right VR thumbstick turns continuously, up to 120 degrees per second. Set
   `Smooth Turning = false` to use 30-degree snap turns instead.
 - **F10** recenters: your current physical head position becomes the character's
   eye position. Use it while sitting or standing comfortably upright; this also
@@ -145,7 +145,7 @@ Edit it while the game is closed.
 | Mouse Turns Body | true | Allow horizontal desktop look to turn the rig |
 | Stick Deadzone | 0.2 | Filter thumbstick drift |
 | Smooth Turning | true | Continuous turning; disable for snap turns |
-| Smooth Turn Speed | 90 | Degrees per second at full stick deflection |
+| Smooth Turn Speed | 120 | Degrees per second at full stick deflection |
 | Snap Turn Degrees | 30 | Turn angle per right-stick deflection |
 | Show Interaction Prompt | true | World-space interaction label in VR |
 | Show Dialogue | true | World-space dialogue and answer panel |

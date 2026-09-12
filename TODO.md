@@ -3,7 +3,7 @@
 Keep one implementation task active. Commit completed changes separately.
 An implemented feature is not hardware-verified until the user tests it.
 
-## Current focus: validate v0.4.0 crouch and hand-use movement
+## Current focus: validate v0.4.1 turn speed and automatic crouch
 
 Implemented: height-based crouch (enter 75%, exit 85%), proportional vertical
 mapping to kobold height, left X forced crouch/stand, F10 reset to automatic mode.
@@ -14,32 +14,34 @@ interaction movement remains. Height failures are isolated from other controls.
 Validation: 240 offline checks and 55 checks inside Unity passed. New runtime
 checks exercise the production movement/posture hook, active hands, disabled look
 and move actions, cutscenes, focus loss, cached headset height, X and jump priority.
-Headset comfort and actual crouch thresholds still need user validation.
+User confirmed X override, F10 reset, movement while using hands, Y HUD toggle,
+HUD placement, compact dialogue, and progress values. Automatic crouch thresholds
+and headroom behavior still need user validation.
+
+v0.4.1 raises full-stick smooth turn speed from 90 to 120 degrees/second.
 
 ## Next: headset checks, in order
 
+- [ ] Faster full-stick turn speed (120 degrees/second) feels comfortable.
+
 - [ ] Stand or sit comfortably upright and press F10. Lower head: crouch below
   75%; rise above 85%: stand. Eye should not drop twice when crouch activates.
-- [ ] Left X forces opposite posture; holding does not flicker; another press
-  toggles back. F10 restores automatic height mode. Y/right A remain separate.
+- [ ] Edge cases: X hold must not flicker; Y/right A must remain separate.
 - [ ] Try standing under low headroom: native collider must remain blocked.
   Check jump, tracking/focus loss, F11, and seated recalibration.
-- [ ] Move with left stick while holding left trigger, right trigger, and both.
-  Game's slower interaction speed is expected; pause/dialogue must still block.
+- [ ] Movement edge cases: both triggers together; pause/dialogue must still block.
 
-- [ ] Left Y hides HUD; release/press shows it again. Holding Y must not flicker.
-  X, right B, triggers, and grips must not toggle it. Visibility survives restart.
-- [ ] HUD sits further right and slightly lower; still stays fixed in the view.
+- [ ] HUD toggle edge cases: held Y must not flicker; other buttons must not
+  toggle it. Visibility survives restart.
 
-- [ ] Dialogue boxes use less height; short lines have no large blank area.
-  Long lines and wrapped answers remain readable; clicking/pagination still works.
+- [ ] Dialogue edge cases: long lines and wrapped answers remain readable;
+  pagination still works.
 - [ ] Left trigger uses left hand/left click (objects, petting, buttons).
   Right trigger uses right hand/right click (equipped tools, sponge).
   Interaction hint says Left trigger; dialogue laser selection stays right trigger.
 - [ ] Progress bars appear upper-left while washing and stay there when looking
   around. Tune HUD Scale/Horizontal Offset/Vertical Offset if needed.
-- [ ] Values match desktop bars. Soap coverage and Sponge supply are distinct;
-  sponge supply changes as it is used/refilled and disappears when unequipped.
+- [ ] Sponge supply edge cases: refill changes supply and unequipping hides it.
 - [ ] Optional task bars match desktop visibility; no stale bars across scenes,
   pause, or F11 toggles. HUD appears in both eyes and stays out of desktop view.
 - [ ] Gameplay movement, camera follow, headset aim, jump, and F10 still work.
@@ -61,6 +63,12 @@ Fix the first failing check before expanding scope. Record backend and relevant
 - [ ] Stick-based dialogue selection only if controller pointing proves unsuitable.
 
 ## Confirmed by user
+
+- [x] v0.4.0 left X crouch override and F10 reset.
+- [x] Movement while using hands.
+- [x] Left Y HUD toggle and adjusted HUD placement.
+- [x] Compact dialogue boxes.
+- [x] Progress values.
 
 - [x] v0.3.0 dialogue text, continuing, and answer selection work.
 

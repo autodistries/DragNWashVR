@@ -11,7 +11,7 @@ using UnityEngine.InputSystem.LowLevel;
 
 namespace WalkNWash.VRCompanion
 {
-    [BepInPlugin(Id, "Walk N Wash VR Companion", "0.4.0")]
+    [BepInPlugin(Id, "Walk N Wash VR Companion", "0.4.1")]
     [BepInDependency("com.newunitymodder.unityvrmod", BepInDependency.DependencyFlags.HardDependency)]
     [DefaultExecutionOrder(30000)]
     public sealed class Plugin : BaseUnityPlugin
@@ -68,7 +68,7 @@ namespace WalkNWash.VRCompanion
             deadzone = Config.Bind("Input", "Stick Deadzone", .2f, new ConfigDescription("Radial movement deadzone.", new AcceptableValueRange<float>(0f, .9f)));
             snapDegrees = Config.Bind("Input", "Snap Turn Degrees", 30f, new ConfigDescription("One turn per right-stick deflection; release stick to turn again.", new AcceptableValueRange<float>(0f, 90f)));
             smoothTurning = Config.Bind("Input", "Smooth Turning", true, "Use continuous right-stick turning. Disable to use Snap Turn Degrees instead.");
-            turnSpeed = Config.Bind("Input", "Smooth Turn Speed", 90f, new ConfigDescription("Degrees per second at full right-stick deflection.", new AcceptableValueRange<float>(0f, 360f)));
+            turnSpeed = Config.Bind("Input", "Smooth Turn Speed", 120f, new ConfigDescription("Degrees per second at full right-stick deflection.", new AcceptableValueRange<float>(0f, 360f)));
             physicalCrouch = Config.Bind("Input", "Height Crouch", true, "Map calibrated physical height to kobold height and crouch when lowered. Left X overrides crouch/stand; F10 recalibrates and restores automatic mode.");
             crouchThreshold = Config.Bind("Input", "Crouch Height Threshold", .75f, new ConfigDescription("Fraction of calibrated height below which crouch begins. Stand again 0.10 above this threshold. Calibrate comfortably upright with F10, standing or seated.", new AcceptableValueRange<float>(.4f, .9f)));
             showPrompt = Config.Bind("UI", "Show Interaction Prompt", true, "Display a world-space interaction hint in VR. Other desktop UI is unchanged.");
