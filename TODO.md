@@ -1,76 +1,61 @@
 # Focused task queue
 
-Keep one implementation task active. Commit completed changes separately. Finish
-the pending headset checks before expanding into more UI or tracked-hand work.
+Keep one implementation task active. Commit completed changes separately.
 An implemented feature is not hardware-verified until the user tests it.
 
-## Current focus
+## Current focus: validate v0.3.0 dialogue
 
-Version 0.2.2 fixes the startup regression reported on 2026-09-12. Versions 0.2.0
-and 0.2.1 created a Unity input device too early in BepInEx Awake; the exception
-removed every companion hook. Device creation now waits until after Unity startup,
-and button failures leave camera, sticks, and F10 active.
+Implemented: half-size interaction hint, corrected OpenVR index-trigger mapping,
+and a dialogue panel controlled by pointing the right controller and pressing its
+index trigger. No stick-navigation fallback yet; test the preferred pointer first.
 
-Validation: 148 offline checks and 10 headless checks inside the actual Unity player
-passed, including the production input callback and trigger/jump action callbacks.
-User confirmed v0.2.2 works, including jumping, object interaction, and visible
-interaction text. Current task: controller-pointed dialogue panel, line advance,
-and answer selection. Keep dialogue failures isolated from working gameplay.
+Validation: 174 offline checks, independent OpenXR header ABI check, and 31 checks
+inside the actual Unity player passed. The runtime checks include rendered sample
+panels, ray hits after rig rotation/scaling, disabled answers, pagination, recenter,
+and Yarn's reveal/advance/answer callbacks. Native pointing and the actual game's
+full dialogue flow still need headset testing.
 
-- [x] Halve interaction prompt size.
-- [x] Fix OpenVR trigger selection: Axis1 is the index trigger; selecting the last
-  one-dimensional axis could read Axis2 squeeze/grip instead. OpenXR already uses
-  `/input/trigger/value`.
-- [ ] Show dialogue text and choices in VR.
-- [ ] Aim right controller at text/answer and use index trigger to activate it.
-- [ ] Verify dialogue clicks never trigger gameplay actions or skip two lines.
+## Next: headset checks, in order
 
-## Next: headset validation
+- [ ] Interaction hint is half its previous size and still readable.
+- [ ] Index triggers (back buttons under index fingers) perform clicks; side grips
+  do not. Right trigger interacts, left trigger performs the secondary action.
+- [ ] Dialogue text/speaker and all answer choices appear in both eyes.
+- [ ] Right-controller laser points comfortably; aimed answer highlights.
+  If needed, tune `Pointer Pitch Offset` before changing the input design.
+- [ ] Trigger on the line panel reveals text, then a fresh press advances it.
+  The trigger used to open dialogue must not skip its first line.
+- [ ] Trigger on an answer chooses that answer; disabled answers cannot be chosen.
+  Test Previous/Next page buttons if a dialogue has more than four choices.
+- [ ] Dialogue trigger never activates the character's hands or another object.
+  Holding trigger, leaving dialogue, losing tracking/focus, or toggling F11 must
+  not produce extra clicks; release before pressing again.
+- [ ] F10 puts the dialogue panel in front again. Looking around otherwise leaves
+  it anchored rather than attached to head rotation.
+- [ ] Gameplay movement, camera follow, headset aim, jump, and smooth turn still work.
+  Background auto-advancing dialogue must not block movement.
 
-- [x] Confirm v0.2.2 restores left-stick movement, camera follow, headset aim, and
-  F10. Check logs for `Companion ready` and `VR action buttons ready` with no
-  companion startup/input errors. User confirmed these controls work in v0.1.0
-  backup `BepInEx/companion-backups/20260912-011800-158473227/` and fail in later
-  builds; user now confirms v0.2.2 works.
-
-- [ ] Right A jumps; holding behaves like Space; release then press can jump again.
-  A held while resuming VR or leaving a menu must not cause an accidental jump.
-- [ ] Smooth turning feels correct; tune speed if needed (default 90°/second).
-- [ ] Right trigger interacts with a selected object and holds/releases hand use.
-- [ ] Left trigger performs the desktop right-click action.
-- [ ] Interaction prompt is visible/readable in both eyes and disappears when
-  looking away; target matches the actual object being interacted with.
-- [ ] No stuck input after pause, focus loss, controller disconnect, or F11 toggle.
-- [ ] Camera follow, headset aim, movement, and F10 still work after these changes.
-
-Fix failures from this list before starting the backlog. Record backend and relevant
+Fix the first failing check before expanding scope. Record backend and relevant
 `BepInEx/LogOutput.log` messages with each failure.
 
 ## Backlog: not started
 
-- [ ] Inventory missing UI (dialogue, progress bars, menus) during gameplay; choose
-  one concrete screen to support next.
-- [ ] Add VR menu interaction after deciding how that menu should appear in VR.
-- [ ] Investigate tracked controller hands/tool aiming as a separate feature.
+- [ ] Inventory other missing UI (progress bars, inventory, menus); choose one
+  concrete screen to support next.
+- [ ] General VR menu interaction.
+- [ ] Tracked controller hands/tool aiming as a separate feature.
+- [ ] Stick-based dialogue selection only if controller pointing proves unsuitable.
 
-## Implemented, awaiting headset validation
-
-- [x] Right-controller **A → Player.Jump** (same game action as desktop Space),
-  with hold/release behavior and focus/menu gating. OpenXR and OpenVR implemented.
-- [x] Configurable continuous right-stick turning; snap mode remains optional.
-- [x] Trigger bindings through the game's input actions.
-- [x] World-space interaction prompt for VR.
-
-## Confirmed working by user
-
-Initial controls confirmed in v0.1.0; v0.2.2 recovery confirmed after the startup fix.
+## Confirmed by user
 
 - [x] Native VR startup through Proton/WiVRn.
-- [x] Left stick moves the character.
-- [x] Right stick snap-turns by about 30° (original mode).
-- [x] Camera follows the character.
-- [x] Headset rotation drives character look.
-- [x] F10 recenters over the character's feet.
+- [x] Left stick moves the character; original right stick snap-turns.
+- [x] Camera follows character; headset rotation drives look; F10 recenters.
+- [x] v0.2.2 restores controls after v0.2.0/v0.2.1 startup regression.
 - [x] Right A jumps.
-- [x] Controller interaction works with objects (trigger/grip mapping correction pending retest).
-- [x] Interaction text appears in headset (half-size adjustment pending retest).
+- [x] Controller interaction works with objects.
+- [x] Interaction text appears in headset (previous size was too large).
+
+Known working pre-regression backup:
+`BepInEx/companion-backups/20260912-011800-158473227/` (v0.1.0).
+Later installs preserve their previous DLL in timestamped backup directories.

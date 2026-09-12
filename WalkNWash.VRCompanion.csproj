@@ -3,7 +3,7 @@
     <TargetFramework>netstandard2.1</TargetFramework>
     <LangVersion>latest</LangVersion>
     <AssemblyName>WalkNWash.VRCompanion</AssemblyName>
-    <Version>0.2.2</Version>
+    <Version>0.3.0</Version>
     <GameDir Condition="'$(GameDir)' == ''">$(MSBuildProjectDirectory)/..</GameDir>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
@@ -14,6 +14,8 @@
   </PropertyGroup>
   <ItemGroup Condition="'$(SmokeTest)' == 'true'">
     <Compile Include="tests/RuntimeSmoke.cs" />
+    <Compile Include="tests/RuntimeDialogueSmoke.cs" />
+    <Reference Include="$(GameDir)/DragNWash_Data/Managed/UnityEngine.ImageConversionModule.dll" Private="false" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="src/**/*.cs" />
@@ -23,6 +25,11 @@
     <Reference Include="$(GameDir)/DragNWash_Data/Managed/UnityEngine.PhysicsModule.dll" Private="false" />
     <Reference Include="$(GameDir)/DragNWash_Data/Managed/UnityEngine.TextRenderingModule.dll" Private="false" />
     <Reference Include="$(GameDir)/DragNWash_Data/Managed/Unity.InputSystem.dll" Private="false" />
+    <Reference Include="$(GameDir)/DragNWash_Data/Managed/UnityEngine.UIModule.dll" Private="false" />
+    <Reference Include="$(GameDir)/DragNWash_Data/Managed/UnityEngine.UI.dll" Private="false" />
+    <Reference Include="$(GameDir)/DragNWash_Data/Managed/Unity.TextMeshPro.dll" Private="false" />
+    <Reference Include="$(GameDir)/DragNWash_Data/Managed/YarnSpinner.Unity.dll" Private="false" />
+    <Reference Include="$(GameDir)/DragNWash_Data/Managed/YarnSpinner.dll" Private="false" />
     <Reference Include="$(GameDir)/BepInEx/core/BepInEx.Core.dll" Private="false" />
     <Reference Include="$(GameDir)/BepInEx/core/BepInEx.Unity.Mono.dll" Private="false" />
     <Reference Include="$(GameDir)/BepInEx/core/0Harmony.dll" Private="false" />

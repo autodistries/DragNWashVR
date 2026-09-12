@@ -30,15 +30,20 @@ Current work and pending headset checks: [TODO.md](TODO.md). Keep one task activ
   or hold to reach/use the hand. **Left trigger** performs its right-click action.
 - A world-space **Right trigger / Interact** hint appears above the game's selected
   interactable in VR. Hand-based targets say **Use hand**. The desktop hint remains.
+- Dialogue text and answer choices appear on a panel in front of you. **Aim the
+  right controller and press its index trigger** to reveal/advance a line or select
+  the highlighted answer. Release between presses. Longer answer lists have
+  clickable **Previous / Next** page controls. **F10** places the panel in front again.
 - Keyboard movement, gamepad movement, and existing interaction keys remain
   available. These trigger bindings operate the game's existing hand/tool animations;
-  tracked controller poses, free-moving hands, and VR menu clicking are not implemented.
+  free-moving hands and general VR menu clicking are not implemented.
 
 Controller movement respects the game's interaction lock. Headset aiming and
 trigger release remain active while using a hand/tool. Inputs respect disabled
 game actions, pause state, cutscenes, and VR focus. The headset view still follows
 the player during cutscenes; this build does not reproduce cinematic camera paths.
-Physical leaning moves the viewpoint, not the game's collision capsule, so leaning
+Interactive dialogue captures VR gameplay input; automatic background dialogue
+does not block movement. Physical leaning moves the viewpoint, not the game's collision capsule, so leaning
 through walls remains possible. Player meshes are not hidden automatically.
 
 ## Build and install
@@ -98,9 +103,11 @@ protonize --prefix yiff DragNWash.exe -force-d3d11
 The initial camera follow, headset aim, movement, snap turn, and recentering were
 confirmed working by the user in v0.1.0. The user reported that v0.2.0 and v0.2.1
 disabled all companion controls at startup. Version 0.2.2 fixes that input-device
-initialization failure and passes headless Unity device/action checks. Recovery
-in the headset, smooth turn, trigger actions, the world-space interaction prompt,
-and A-button jump still require an in-headset test.
+initialization failure and passes headless Unity device/action checks.
+The user subsequently confirmed recovery, jumping,
+object interaction, and visible interaction text. Version 0.3.0 halves that text's
+size, corrects OpenVR trigger/grip confusion, and adds controller-pointed dialogue;
+these changes still require headset validation.
 Automated checks do not prove that a given game renderer or controller
 profile works correctly at runtime. In particular, if the world stays attached
 to the headset despite physical head rotation, that is a separate pose/rendering
@@ -124,6 +131,10 @@ Edit it while the game is closed.
 | Smooth Turn Speed | 90 | Degrees per second at full stick deflection |
 | Snap Turn Degrees | 30 | Turn angle per right-stick deflection |
 | Show Interaction Prompt | true | World-space interaction label in VR |
+| Show Dialogue | true | World-space dialogue and answer panel |
+| Dialogue Width | 1.2 | Panel width in tracking-space meters |
+| Dialogue Distance | 1.6 | Initial distance from headset in tracking-space meters |
+| Pointer Pitch Offset | 0 | Adjust controller ray pitch in degrees if needed |
 
 Use this plugin's eye-height offset instead of UnityVRMod's eye-height/scene-pose
 offsets during gameplay: the companion controls the rig's position. UnityVRMod's
@@ -140,7 +151,12 @@ follow enabled. No second OpenXR instance or session is created.
 
 OpenVR uses UnityVRMod's existing `CVRSystem` and legacy controller state, selecting
 the joystick axis by its device property and falling back to axis zero for
-trackpads. This depends on the runtime's legacy input emulation, including xrizer's.
+trackpads. The index trigger reads **Axis1**, with button 33 as the digital fallback.
+It does not choose an arbitrary axis by its `Trigger` type: xrizer also exposes
+the grip/squeeze value as a one-dimensional Axis2 (see
+[xrizer's legacy mapping](https://github.com/Supreeeme/xrizer/blob/main/src/input/legacy.rs)). OpenXR explicitly binds
+`/input/trigger/value`, not squeeze. This depends on the runtime's legacy input
+emulation, including xrizer's.
 
 The game has Unity Input System movement bindings, but the mod's native VR session
 does not provide Unity XR devices. The companion supplies movement directly to the
@@ -169,9 +185,23 @@ The companion mirrors its show/hide signals into a separate world-space label,
 displayed only during the VR eye render passes. The label tracks the same target
 the game selects; it does not make out-of-range objects interactable.
 
-This fixes the interaction hint specifically. It does not convert the remaining
-desktop menus, dialogue, progress bars, or HUD into VR, and does not add a VR pointer
-for menu clicking. Existing desktop mouse and keyboard controls remain available.
+The dialogue panel separately mirrors the active Yarn line presenter and its
+actual option items, including speaker, revealed characters, and unavailable
+answers. It stays anchored to the tracking origin while you look around. A right
+controller ray highlights an answer; the trigger queues one activation for normal
+Update, outside the eye render passes. The handler rechecks that the dialogue and
+option are still current before using Yarn's original selection method. Line
+advance uses the same handler as desktop input: reveal the typewriter first,
+then advance. Opening dialogue or losing tracking/focus requires trigger release
+before a new click. Dialogue clicks do not synthesize desktop mouse events.
+
+OpenXR uses the right-hand `aim/pose` action in the mod's reference space and
+predicted frame time. OpenVR uses the right controller's tracked pose from the
+mod's existing compositor frame; adjust `Pointer Pitch Offset` if its forward
+direction differs from the comfortable pointing angle for your controller.
+
+This does not convert the remaining desktop menus, progress bars, inventory, or
+HUD into VR. Existing desktop mouse and keyboard controls remain available.
 
 ## Validation and troubleshooting
 
@@ -187,17 +217,27 @@ structure layouts, and hook signatures in the actual game and available mod DLLs
 (including the local OpenVR/OpenXR ZIP archives). The optional C check validates
 the same structure layouts against installed Khronos OpenXR headers.
 
-An additional, opt-in runtime test lives in `tests/RuntimeSmoke.cs`. Build with
-`dotnet build -c Release -p:SmokeTest=true -o /tmp/walknwash-vr-smoke`, temporarily
-install that DLL after backing up the installed companion, and launch the game
-through the same Proton prefix with `-batchmode -nographics --vr-companion-smoke-test`.
-Close the normal game first and preserve `BepInEx/LogOutput.log` before this run.
-The test lets the production input callback run, then checks the actual startup
-device against the game's input actions: trigger press/hold/release, jump,
-secondary action, focus release, and rearming. It logs `RUNTIME SMOKE PASS` or
-`RUNTIME SMOKE FAIL` and exits. Restore the normal DLL afterward. Normal builds
-exclude this test entirely. This verifies Unity input integration, not native
-controller polling or VR rendering.
+The opt-in runtime tests exercise the actual startup input device, trigger/jump
+callbacks, transformed controller rays, answer pagination, disabled answers,
+panel recentering, and Yarn's reveal/advance/selection handlers. They can also
+render sample panels to `dist/dialogue-options.png` and `dist/dialogue-line.png`.
+Close the game first, then use the same Wine/Proton environment as your normal
+launcher, passing its executable and subcommand to the wrapper. For this install:
+
+```bash
+env STEAM_COMPAT_DATA_PATH=/home/cat/.prefixes/yiff \
+    STEAM_COMPAT_CLIENT_INSTALL_PATH=/home/cat/.local/share/Steam \
+    SteamGameId=0 WINEDLLOVERRIDES=winhttp=n,b \
+    bash tests/run-runtime-smoke.sh \
+    '/home/cat/.local/share/Steam/steamapps/common/Proton - Experimental/proton' run
+```
+
+The wrapper saves/restores the installed DLL and original BepInEx log, retains test
+logs under `dist/runtime-*`, and refuses to run alongside the game. It launches a
+bounded batch-mode check, which logs `RUNTIME SMOKE PASS` or `RUNTIME SMOKE FAIL`
+and exits. Set `SMOKE_NOGRAPHICS=1` to skip image capture. Normal builds exclude
+the test code entirely. These checks do not prove native headset/controller
+tracking or in-headset readability.
 
 Read `BepInEx/LogOutput.log` for `Walk N Wash VR Companion`:
 

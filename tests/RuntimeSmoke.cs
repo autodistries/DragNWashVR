@@ -58,7 +58,8 @@ namespace WalkNWash.VRCompanion
                     check(!actions.Player.Jump.IsPressed(), "synchronous release clears jump");
                     actions.Player.Disable();
                 }
-                log.LogInfo("RUNTIME SMOKE PASS: " + count + " Unity device/action checks.");
+                RuntimeDialogueSmoke.Run(check);
+                log.LogInfo("RUNTIME SMOKE PASS: " + count + " Unity input/dialogue checks.");
                 Application.Quit(0);
             }
             catch (Exception e)

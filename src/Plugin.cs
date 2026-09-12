@@ -11,7 +11,7 @@ using UnityEngine.InputSystem.LowLevel;
 
 namespace WalkNWash.VRCompanion
 {
-    [BepInPlugin(Id, "Walk N Wash VR Companion", "0.2.2")]
+    [BepInPlugin(Id, "Walk N Wash VR Companion", "0.3.0")]
     [BepInDependency("com.newunitymodder.unityvrmod", BepInDependency.DependencyFlags.HardDependency)]
     [DefaultExecutionOrder(30000)]
     public sealed class Plugin : BaseUnityPlugin
@@ -27,6 +27,10 @@ namespace WalkNWash.VRCompanion
         private ActionButtons actionButtons;
         private bool buttonInputFailed;
         private readonly VrPrompt prompt = new VrPrompt();
+        private readonly VrDialogue dialogue = new VrDialogue();
+        private bool dialogueFailed;
+        private ConfigEntry<bool> showDialogue;
+        private ConfigEntry<float> dialogueWidth, dialogueDistance, pointerPitch;
         private bool promptFailed;
         private ConfigEntry<bool> showPrompt;
         private ConfigEntry<bool> enabledSetting, headAim, controllers, mouseTurn, smoothTurning;
@@ -56,6 +60,10 @@ namespace WalkNWash.VRCompanion
             smoothTurning = Config.Bind("Input", "Smooth Turning", true, "Use continuous right-stick turning. Disable to use Snap Turn Degrees instead.");
             turnSpeed = Config.Bind("Input", "Smooth Turn Speed", 90f, new ConfigDescription("Degrees per second at full right-stick deflection.", new AcceptableValueRange<float>(0f, 360f)));
             showPrompt = Config.Bind("UI", "Show Interaction Prompt", true, "Display a world-space interaction hint in VR. Other desktop UI is unchanged.");
+            showDialogue = Config.Bind("UI", "Show Dialogue", true, "Show dialogue text and answers in VR. Aim right controller and press its index trigger to continue or choose.");
+            dialogueWidth = Config.Bind("UI", "Dialogue Width", 1.2f, new ConfigDescription("Dialogue panel width in tracking-space meters.", new AcceptableValueRange<float>(.5f, 2f)));
+            dialogueDistance = Config.Bind("UI", "Dialogue Distance", 1.6f, new ConfigDescription("Distance from headset when dialogue opens. F10 places the panel in front again.", new AcceptableValueRange<float>(.7f, 3f)));
+            pointerPitch = Config.Bind("UI", "Pointer Pitch Offset", 0f, new ConfigDescription("Controller ray pitch adjustment in degrees; useful for OpenVR controller pose conventions.", new AcceptableValueRange<float>(-60f, 60f)));
             try
             {
                 harmony = new Harmony(Id);
@@ -137,10 +145,39 @@ namespace WalkNWash.VRCompanion
             && Time.time >= Convert.ToSingle(Backend.Field(manager, "_autoSafeModeEndTime"));
         private bool ControllerContext => VrActive && calibrated && calibratedRig == backend.Rig && player != null && player.isActiveAndEnabled
             && look != null && locomotion != null && backend.Focused
+            && !DialogueActive
             && !locomotion.HasCutscene
             && (GameStateManager.Instance == null || !GameStateManager.Instance.IsPaused);
         private bool CanAim => ControllerContext && MenuManager.actions.Player.Look.enabled;
         private bool CanControl => ControllerContext && !locomotion.IsInteracting && MenuManager.actions.Player.Move.enabled;
+
+        private bool DialogueActive
+        {
+            get
+            {
+                if (dialogueFailed) return false;
+                try { return dialogue.BlocksGameplay; }
+                catch (Exception e) { DialogueError(e); return false; }
+            }
+        }
+        private void DialogueError(Exception e)
+        {
+            dialogueFailed = true;
+            dialogue.Reset();
+            Logger.LogError("VR dialogue disabled; gameplay controls remain active. " + e);
+        }
+        private void Update()
+        {
+            if (dialogueFailed) return;
+            try
+            {
+                bool visible = Enabled && showDialogue.Value && VrActive
+                    && (GameStateManager.Instance == null || !GameStateManager.Instance.IsPaused);
+                if (!visible) dialogue.Reset();
+                else dialogue.Dispatch(controllers.Value && backend.Focused);
+            }
+            catch (Exception e) { DialogueError(e); }
+        }
 
         // A virtual device must not trigger the game's hardware hotplug pause handler.
         private static bool DeviceChanged(InputDevice device) => !(device is CompanionButtons);
@@ -200,17 +237,30 @@ namespace WalkNWash.VRCompanion
             Guard(() =>
             {
                 if (Keyboard.current != null && Keyboard.current[recenterKey.Value].wasPressedThisFrame)
+                {
                     calibrated = false;
+                    dialogue.Recenter();
+                }
                 if (scheduledFrame != Time.frameCount || !VrActive) return;
                 rendering = true;
                 try { backend.Render(); }
-                finally { rendering = false; prompt.EndEye(); }
+                finally { rendering = false; prompt.EndEye(); dialogue.EndEye(); }
             });
         }
         private static void BeforeEye(object __instance)
         {
             if (current == null || !current.Enabled || current.backend?.Setup != __instance) return;
             current.Guard(current.UpdateOrigin);
+            if (!current.dialogueFailed)
+            {
+                try
+                {
+                    current.dialogue.BeginEye(current.backend, current.showDialogue.Value && current.VrActive
+                        && (GameStateManager.Instance == null || !GameStateManager.Instance.IsPaused),
+                        current.controllers.Value, current.dialogueWidth.Value, current.dialogueDistance.Value, current.pointerPitch.Value);
+                }
+                catch (Exception e) { current.DialogueError(e); }
+            }
             if (current.promptFailed) return;
             try
             {
@@ -225,7 +275,7 @@ namespace WalkNWash.VRCompanion
                 current.Logger.LogError("VR interaction prompt disabled; other controls remain active. " + e);
             }
         }
-        private static void AfterEye() { current?.prompt.EndEye(); }
+        private static void AfterEye() { current?.prompt.EndEye(); current?.dialogue.EndEye(); }
         private static void PromptShown(Vector3 __0) { current?.prompt.Show(__0); }
         private static void PromptHidden() { current?.prompt.Hide(); }
         private void UpdateOrigin()
@@ -312,6 +362,7 @@ namespace WalkNWash.VRCompanion
             {
                 current.backend.Dispose();
                 current.prompt.Hide();
+                current.dialogue.Reset();
                 current.ReleaseButtons();
                 current.backend = null;
                 current.calibrated = false;
@@ -332,6 +383,7 @@ namespace WalkNWash.VRCompanion
         {
             InputSystem.onBeforeUpdate -= BeforeInputUpdate;
             prompt.Dispose();
+            dialogue.Dispose();
             try { actionButtons?.Dispose(); }
             catch (Exception e) { Logger.LogWarning("Button cleanup failed: " + e.Message); }
             finally
