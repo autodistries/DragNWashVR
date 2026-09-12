@@ -22,7 +22,7 @@ namespace WalkNWash.VRCompanion
         private float nextSearch;
         private static readonly FieldInfo toolManager = AccessTools.Field(typeof(ToolManager), "_instance");
         private static readonly string[] fields = { "cleanBar", "soapBar", "talkBar", "debrisBar", "bandagesBar", "HandjobBar" };
-        private static readonly string[] labels = { "Cleanliness", "Soap coverage", "Conversation ready", "Debris removed", "Bandaging", "Hand stimulation" };
+        private static readonly string[] labels = { "Cleanliness", "Soap coverage", "Conversation ready", "Debris remaining", "Bandaging", "Hand stimulation" };
         internal readonly List<HudReading> Readings = new List<HudReading>();
 
         internal void Read()
