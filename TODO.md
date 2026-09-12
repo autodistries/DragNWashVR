@@ -3,7 +3,7 @@
 Keep one implementation task active. Commit completed changes separately.
 An implemented feature is not hardware-verified until the user tests it.
 
-## Current focus: validate v0.3.0 dialogue
+## Current focus: compact dialogue, hand mapping, progress HUD
 
 Implemented: half-size interaction hint, corrected OpenVR index-trigger mapping,
 and a dialogue panel controlled by pointing the right controller and pressing its
@@ -43,7 +43,13 @@ Fix the first failing check before expanding scope. Record backend and relevant
 - [ ] Inventory other missing UI (progress bars, inventory, menus); choose one
   concrete screen to support next.
 - [ ] General VR menu interaction.
-- [ ] Tracked controller hands/tool aiming as a separate feature.
+- [ ] Controller-driven hands/tool aiming (deferred until current UI work passes).
+  Left hand follows left controller; right hand/item follows right controller.
+  Preserve idle hands near body with interaction disabled. Left trigger activates
+  left-hand touch/pet/button interaction; right trigger activates held tools.
+  Replace camera-directed contact rays as well as visible hand poses, so washing
+  requires controller movement rather than head movement. Preserve reach limits,
+  collisions, release behavior, and sponge refill/contact mechanics.
 - [ ] Stick-based dialogue selection only if controller pointing proves unsuitable.
 
 ## Confirmed by user
@@ -59,3 +65,5 @@ Fix the first failing check before expanding scope. Record backend and relevant
 Known working pre-regression backup:
 `BepInEx/companion-backups/20260912-011800-158473227/` (v0.1.0).
 Later installs preserve their previous DLL in timestamped backup directories.
+
+- [x] User confirmed v0.3.0 dialogue text, continuing, and answer selection work.

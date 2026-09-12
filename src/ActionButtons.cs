@@ -96,8 +96,8 @@ namespace WalkNWash.VRCompanion
             var allowed = actions.devices;
             if (allowed.HasValue && !allowed.Value.Contains(device))
                 actions.devices = allowed.Value.Concat(new InputDevice[] { device }).ToArray();
-            uint state = primary.Update(right, enabled && actions.Player.Plap.enabled) ? 1u : 0u;
-            if (secondary.Update(left, enabled && actions.Player.Attack.enabled)) state |= 2;
+            uint state = primary.Update(left, enabled && actions.Player.Plap.enabled) ? 1u : 0u;
+            if (secondary.Update(right, enabled && actions.Player.Attack.enabled)) state |= 2;
             if (jump.Update(jumpPressed ? 1 : 0, enabled && actions.Player.Jump.enabled)) state |= 4;
             InputSystem.QueueStateEvent(device, new CompanionButtonState { buttons = state });
         }

@@ -59,7 +59,7 @@ namespace WalkNWash.VRCompanion
             root.layer = layer;
             root.transform.SetPositionAndRotation(target, facing);
             root.transform.localScale = Vector3.one * Mathf.Clamp(delta.magnitude, .6f, 3f);
-            text.text = (triggers ? "Right trigger" : "Left mouse") +
+            text.text = (triggers ? "Left trigger" : "Left mouse") +
                 (interactable.interactsWithHand ? "\nUse hand" : "\nInteract");
             mesh.enabled = true;
         }

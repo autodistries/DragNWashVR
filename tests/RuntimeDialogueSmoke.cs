@@ -28,16 +28,21 @@ namespace WalkNWash.VRCompanion
                     var root = (GameObject)Backend.Field(panel, "root");
                     Func<float, float, Ray> ray = (x, y) => new Ray(rig.transform.position,
                         root.transform.TransformPoint(new Vector3(x, y, 0)) - rig.transform.position);
-                    check(panel.Point(ray(0, 30), true) == 0, "pointing selects first answer under rig transform/scale");
-                    check(panel.Point(ray(0, -60), true) == VrDialoguePanel.None, "unavailable answer cannot be selected");
+                    Func<string, Ray> targetRay = name =>
+                    {
+                        var point = root.transform.Find(name).GetComponent<RectTransform>().anchoredPosition;
+                        return ray(point.x, point.y);
+                    };
+                    check(panel.Point(targetRay("Answer 0"), true) == 0, "pointing selects first answer under rig transform/scale");
+                    check(panel.Point(targetRay("Answer 1"), true) == VrDialoguePanel.None, "unavailable answer cannot be selected");
                     check(panel.Point(ray(700, 30), true) == VrDialoguePanel.None, "missed panel cannot click");
-                    check(panel.Point(ray(0, 30), false) == VrDialoguePanel.None, "untracked controller cannot click");
+                    check(panel.Point(targetRay("Answer 0"), false) == VrDialoguePanel.None, "untracked controller cannot click");
                     check(panel.Point(new Ray(root.transform.TransformPoint(new Vector3(0, 30, 100)), -root.transform.forward), true)
                         == VrDialoguePanel.None, "back-facing ray cannot click");
-                    check(panel.Point(ray(380, -345), true) == VrDialoguePanel.Next, "page-next target reachable");
+                    check(panel.Point(targetRay("Next page"), true) == VrDialoguePanel.Next, "page-next target reachable");
                     check(panel.ChangePage(VrDialoguePanel.Next), "next page opens");
-                    check(panel.Point(ray(0, 30), true) == 4, "second page retains original answer index");
-                    check(panel.Point(ray(-380, -345), true) == VrDialoguePanel.Previous, "page-previous target reachable");
+                    check(panel.Point(targetRay("Answer 0"), true) == 4, "second page retains original answer index");
+                    check(panel.Point(targetRay("Previous page"), true) == VrDialoguePanel.Previous, "page-previous target reachable");
                     panel.ChangePage(VrDialoguePanel.Previous);
                     Vector3 anchored = root.transform.position;
                     panel.Place(rig.transform, Vector3.right, Quaternion.Euler(0, 40, 0), 1.2f, 1.6f);
@@ -55,7 +60,7 @@ namespace WalkNWash.VRCompanion
                     choices[2].Text = "Tell me more about the village before I decide.";
                     choices[3].Text = "I would like to stay here for a while.";
                     panel.Present(source, "Guide", "There are several ways forward. Which path would you like to take?", int.MaxValue, choices, false);
-                    panel.Point(ray(0, 30), true);
+                    panel.Point(targetRay("Answer 0"), true);
                     if (Array.IndexOf(Environment.GetCommandLineArgs(), "--vr-companion-ui-capture") >= 0)
                         Capture(panel, "dialogue-options.png", check);
                     panel.EndEye();
@@ -64,6 +69,12 @@ namespace WalkNWash.VRCompanion
                     check(root.GetComponentInChildren<LineRenderer>().enabled, "pointer restored for second eye");
                     panel.EndEye();
                     panel.Present(source, "Guide", "Point at this panel and press the right index trigger to reveal the text, then press again to continue.", int.MaxValue, new List<DialogueChoice>(), true);
+                    check(root.GetComponent<RectTransform>().rect.height < 400, "short line panel uses less than half original height");
+                    float fullHeight = root.GetComponent<RectTransform>().rect.height;
+                    panel.Present(source, "Guide", "Point at this panel and press the right index trigger to reveal the text, then press again to continue.", 3, new List<DialogueChoice>(), true);
+                    check(root.GetComponent<RectTransform>().rect.height == fullHeight, "typewriter does not resize panel");
+                    panel.Present(source, "Guide", "Point at this panel and press the right index trigger to reveal the text, then press again to continue.", int.MaxValue, new List<DialogueChoice>(), true);
+                    check(panel.Point(ray(0, 350), true) == VrDialoguePanel.None, "removed blank panel area cannot click");
                     check(panel.Point(ray(0, 0), true) == VrDialoguePanel.Continue, "line panel can advance");
                     if (Array.IndexOf(Environment.GetCommandLineArgs(), "--vr-companion-ui-capture") >= 0)
                         Capture(panel, "dialogue-line.png", check);
