@@ -3,45 +3,39 @@
 Keep one implementation task active. Commit completed changes separately.
 An implemented feature is not hardware-verified until the user tests it.
 
-## Current focus: compact dialogue, hand mapping, progress HUD
+## Current focus: validate v0.3.1 UI and hand mapping
 
-Implemented: half-size interaction hint, corrected OpenVR index-trigger mapping,
-and a dialogue panel controlled by pointing the right controller and pressing its
-index trigger. No stick-navigation fallback yet; test the preferred pointer first.
+Implemented: dialogue height fits text/answers; gameplay triggers match hands;
+upper-left progress HUD follows headset position/orientation. Controller-driven
+hand poses are deferred as requested.
 
-Validation: 174 offline checks, independent OpenXR header ABI check, and 31 checks
-inside the actual Unity player passed. The runtime checks include rendered sample
-panels, ray hits after rig rotation/scaling, disabled answers, pagination, recenter,
-and Yarn's reveal/advance/answer callbacks. Native pointing and the actual game's
-full dialogue flow still need headset testing.
+Validation: 186 offline checks and 44 checks inside the actual Unity player
+passed. Rendered previews inspected. Tests cover compact panel hit targets,
+pagination, Yarn callbacks, left/right action mapping, live desktop bar values,
+hidden bars, HUD positioning after head/rig transforms, and stale row removal.
+Headset readability and live washing/tool changes still need user validation.
 
 ## Next: headset checks, in order
 
-- [ ] Interaction hint is half its previous size and still readable.
-- [ ] Index triggers (back buttons under index fingers) perform clicks; side grips
-  do not. Right trigger interacts, left trigger performs the secondary action.
-- [ ] Dialogue text/speaker and all answer choices appear in both eyes.
-- [ ] Right-controller laser points comfortably; aimed answer highlights.
-  If needed, tune `Pointer Pitch Offset` before changing the input design.
-- [ ] Trigger on the line panel reveals text, then a fresh press advances it.
-  The trigger used to open dialogue must not skip its first line.
-- [ ] Trigger on an answer chooses that answer; disabled answers cannot be chosen.
-  Test Previous/Next page buttons if a dialogue has more than four choices.
-- [ ] Dialogue trigger never activates the character's hands or another object.
-  Holding trigger, leaving dialogue, losing tracking/focus, or toggling F11 must
-  not produce extra clicks; release before pressing again.
-- [ ] F10 puts the dialogue panel in front again. Looking around otherwise leaves
-  it anchored rather than attached to head rotation.
-- [ ] Gameplay movement, camera follow, headset aim, jump, and smooth turn still work.
-  Background auto-advancing dialogue must not block movement.
+- [ ] Dialogue boxes use less height; short lines have no large blank area.
+  Long lines and wrapped answers remain readable; clicking/pagination still works.
+- [ ] Left trigger uses left hand/left click (objects, petting, buttons).
+  Right trigger uses right hand/right click (equipped tools, sponge).
+  Interaction hint says Left trigger; dialogue laser selection stays right trigger.
+- [ ] Progress bars appear upper-left while washing and stay there when looking
+  around. Tune HUD Scale/Horizontal Offset/Vertical Offset if needed.
+- [ ] Values match desktop bars. Soap coverage and Sponge supply are distinct;
+  sponge supply changes as it is used/refilled and disappears when unequipped.
+- [ ] Optional task bars match desktop visibility; no stale bars across scenes,
+  pause, or F11 toggles. HUD appears in both eyes and stays out of desktop view.
+- [ ] Gameplay movement, camera follow, headset aim, jump, and F10 still work.
 
 Fix the first failing check before expanding scope. Record backend and relevant
 `BepInEx/LogOutput.log` messages with each failure.
 
 ## Backlog: not started
 
-- [ ] Inventory other missing UI (progress bars, inventory, menus); choose one
-  concrete screen to support next.
+- [ ] Inventory other missing UI (inventory, menus); choose one concrete screen next.
 - [ ] General VR menu interaction.
 - [ ] Controller-driven hands/tool aiming (deferred until current UI work passes).
   Left hand follows left controller; right hand/item follows right controller.
@@ -54,6 +48,8 @@ Fix the first failing check before expanding scope. Record backend and relevant
 
 ## Confirmed by user
 
+- [x] v0.3.0 dialogue text, continuing, and answer selection work.
+
 - [x] Native VR startup through Proton/WiVRn.
 - [x] Left stick moves the character; original right stick snap-turns.
 - [x] Camera follows character; headset rotation drives look; F10 recenters.
@@ -65,5 +61,3 @@ Fix the first failing check before expanding scope. Record backend and relevant
 Known working pre-regression backup:
 `BepInEx/companion-backups/20260912-011800-158473227/` (v0.1.0).
 Later installs preserve their previous DLL in timestamped backup directories.
-
-- [x] User confirmed v0.3.0 dialogue text, continuing, and answer selection work.

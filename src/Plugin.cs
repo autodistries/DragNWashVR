@@ -11,7 +11,7 @@ using UnityEngine.InputSystem.LowLevel;
 
 namespace WalkNWash.VRCompanion
 {
-    [BepInPlugin(Id, "Walk N Wash VR Companion", "0.3.0")]
+    [BepInPlugin(Id, "Walk N Wash VR Companion", "0.3.1")]
     [BepInDependency("com.newunitymodder.unityvrmod", BepInDependency.DependencyFlags.HardDependency)]
     [DefaultExecutionOrder(30000)]
     public sealed class Plugin : BaseUnityPlugin
@@ -28,6 +28,10 @@ namespace WalkNWash.VRCompanion
         private bool buttonInputFailed;
         private readonly VrPrompt prompt = new VrPrompt();
         private readonly VrDialogue dialogue = new VrDialogue();
+        private readonly VrHud hud = new VrHud();
+        private bool hudFailed;
+        private ConfigEntry<bool> showHud;
+        private ConfigEntry<float> hudScale, hudHorizontal, hudVertical;
         private bool dialogueFailed;
         private ConfigEntry<bool> showDialogue;
         private ConfigEntry<float> dialogueWidth, dialogueDistance, pointerPitch;
@@ -64,6 +68,10 @@ namespace WalkNWash.VRCompanion
             dialogueWidth = Config.Bind("UI", "Dialogue Width", 1.2f, new ConfigDescription("Dialogue panel width in tracking-space meters.", new AcceptableValueRange<float>(.5f, 2f)));
             dialogueDistance = Config.Bind("UI", "Dialogue Distance", 1.6f, new ConfigDescription("Distance from headset when dialogue opens. F10 places the panel in front again.", new AcceptableValueRange<float>(.7f, 3f)));
             pointerPitch = Config.Bind("UI", "Pointer Pitch Offset", 0f, new ConfigDescription("Controller ray pitch adjustment in degrees; useful for OpenVR controller pose conventions.", new AcceptableValueRange<float>(-60f, 60f)));
+            showHud = Config.Bind("UI", "Show Progress HUD", true, "Show game progress bars and equipped sponge supply at the upper-left of the headset view.");
+            hudScale = Config.Bind("UI", "HUD Scale", 1f, new ConfigDescription("Progress HUD size multiplier.", new AcceptableValueRange<float>(.5f, 1.5f)));
+            hudHorizontal = Config.Bind("UI", "HUD Horizontal Offset", -.65f, new ConfigDescription("Upper-left HUD edge horizontally in head space, at 1.2 meters depth.", new AcceptableValueRange<float>(-1f, 0f)));
+            hudVertical = Config.Bind("UI", "HUD Vertical Offset", .48f, new ConfigDescription("Upper-left HUD edge vertically in head space, at 1.2 meters depth.", new AcceptableValueRange<float>(0f, .8f)));
             try
             {
                 harmony = new Harmony(Id);
@@ -244,13 +252,29 @@ namespace WalkNWash.VRCompanion
                 if (scheduledFrame != Time.frameCount || !VrActive) return;
                 rendering = true;
                 try { backend.Render(); }
-                finally { rendering = false; prompt.EndEye(); dialogue.EndEye(); }
+                finally { rendering = false; prompt.EndEye(); dialogue.EndEye(); hud.EndEye(); }
             });
         }
         private static void BeforeEye(object __instance)
         {
             if (current == null || !current.Enabled || current.backend?.Setup != __instance) return;
             current.Guard(current.UpdateOrigin);
+            if (!current.hudFailed)
+            {
+                try
+                {
+                    current.hud.BeginEye(current.backend, current.showHud.Value && current.VrActive
+                        && current.player != null && current.player.isActiveAndEnabled
+                        && (GameStateManager.Instance == null || !GameStateManager.Instance.IsPaused),
+                        current.hudScale.Value, current.hudHorizontal.Value, current.hudVertical.Value);
+                }
+                catch (Exception e)
+                {
+                    current.hudFailed = true;
+                    current.hud.Reset();
+                    current.Logger.LogError("VR progress HUD disabled; controls and dialogue remain active. " + e);
+                }
+            }
             if (!current.dialogueFailed)
             {
                 try
@@ -275,7 +299,7 @@ namespace WalkNWash.VRCompanion
                 current.Logger.LogError("VR interaction prompt disabled; other controls remain active. " + e);
             }
         }
-        private static void AfterEye() { current?.prompt.EndEye(); current?.dialogue.EndEye(); }
+        private static void AfterEye() { current?.prompt.EndEye(); current?.dialogue.EndEye(); current?.hud.EndEye(); }
         private static void PromptShown(Vector3 __0) { current?.prompt.Show(__0); }
         private static void PromptHidden() { current?.prompt.Hide(); }
         private void UpdateOrigin()
@@ -363,6 +387,7 @@ namespace WalkNWash.VRCompanion
                 current.backend.Dispose();
                 current.prompt.Hide();
                 current.dialogue.Reset();
+                current.hud.Reset();
                 current.ReleaseButtons();
                 current.backend = null;
                 current.calibrated = false;
@@ -384,6 +409,7 @@ namespace WalkNWash.VRCompanion
             InputSystem.onBeforeUpdate -= BeforeInputUpdate;
             prompt.Dispose();
             dialogue.Dispose();
+            hud.Dispose();
             try { actionButtons?.Dispose(); }
             catch (Exception e) { Logger.LogWarning("Button cleanup failed: " + e.Message); }
             finally

@@ -126,6 +126,9 @@ namespace WalkNWash.VRCompanion
         }
 
         private static void Capture(VrDialoguePanel panel, string name, Action<bool, string> check)
+            => Capture(() => panel.BeginEye(31), panel.EndEye, name, check);
+
+        internal static void Capture(Action show, Action hide, string name, Action<bool, string> check)
         {
             var go = new GameObject("Dialogue capture camera", typeof(Camera));
             var camera = go.GetComponent<Camera>();
@@ -141,21 +144,21 @@ namespace WalkNWash.VRCompanion
             try
             {
                 camera.targetTexture = target;
-                panel.BeginEye(31);
+                show();
                 camera.Render();
                 RenderTexture.active = target;
                 texture.ReadPixels(new Rect(0, 0, 1200, 1000), 0, 0);
                 texture.Apply();
                 int bright = 0;
                 foreach (var pixel in texture.GetPixels32()) if (pixel.r > 180 && pixel.g > 180 && pixel.b > 180) bright++;
-                check(bright > 100, "rendered dialogue contains visible text: " + name);
+                check(bright > 100, "rendered UI contains visible text: " + name);
                 string directory = Path.Combine(BepInEx.Paths.GameRootPath, "walknwash-vr-companion", "dist");
                 Directory.CreateDirectory(directory);
                 File.WriteAllBytes(Path.Combine(directory, name), ImageConversion.EncodeToPNG(texture));
             }
             finally
             {
-                panel.EndEye();
+                hide();
                 RenderTexture.active = original;
                 camera.targetTexture = null;
                 target.Release();

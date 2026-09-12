@@ -162,6 +162,15 @@ internal static class Checks
             Method(Type(module, "PlayerController"), "Update", 0, "System.Void");
             Method(Type(module, "PlayerController"), "OnJumpAction", 1, "System.Void");
             var dialog = Type(module, "DialogCommands");
+            var bars = Type(module, "UiProgressBars");
+            foreach (string name in new[] { "cleanBar", "soapBar", "talkBar", "debrisBar", "bandagesBar", "HandjobBar" })
+                Field(bars, name, "UiProgressBar");
+            Field(Type(module, "UiProgressBar"), "panel", "UnityEngine.GameObject");
+            Field(Type(module, "UiProgressBar"), "_progress", "System.Single");
+            Field(Type(module, "ToolModelSponge"), "fillAmount", "System.Single");
+            Field(Type(module, "ToolManager"), "_instance");
+            Field(Type(module, "ToolManager"), "_currentTool");
+            Method(Type(module, "Tool"), "GetModel", 0, "com.gatordragongames.washnwalk.tools.ToolModel");
             Field(dialog, "_instance"); Field(dialog, "dialogueRunner");
             Field(dialog, "linePresenter"); Field(dialog, "lineAdvancer");
             var input = Type(module, "InputSystem_Actions");

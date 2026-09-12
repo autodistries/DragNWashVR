@@ -26,14 +26,19 @@ Current work and pending headset checks: [TODO.md](TODO.md). Keep one task activ
 - **F11** remains UnityVRMod's VR/safe-mode toggle.
 - **Right controller A** jumps using `Player.Jump`, the same action as desktop
   Space. Press, hold, and release follow the game's normal jump behavior.
-- **Right trigger** performs the game's left-click action: interact with an object,
-  or hold to reach/use the hand. **Left trigger** performs its right-click action.
-- A world-space **Right trigger / Interact** hint appears above the game's selected
+- **Left trigger** performs the game's left-click action: interact with an object,
+  pet, or hold to reach with the left hand. **Right trigger** performs its right-click
+  action, using the right hand and equipped tool. Dialogue selection still uses
+  the right controller and right trigger.
+- A world-space **Left trigger / Interact** hint appears above the game's selected
   interactable in VR. Hand-based targets say **Use hand**. The desktop hint remains.
 - Dialogue text and answer choices appear on a panel in front of you. **Aim the
   right controller and press its index trigger** to reveal/advance a line or select
   the highlighted answer. Release between presses. Longer answer lists have
-  clickable **Previous / Next** page controls. **F10** places the panel in front again.
+  clickable **Previous / Next** page controls. Panel height fits its text and visible
+  answers; short lines no longer reserve a large empty box. **F10** places the panel in front again.
+- A compact upper-left HUD follows headset orientation and shows the visible game
+  progress bars plus **Sponge supply** when the sponge is equipped.
 - Keyboard movement, gamepad movement, and existing interaction keys remain
   available. These trigger bindings operate the game's existing hand/tool animations;
   free-moving hands and general VR menu clicking are not implemented.
@@ -92,10 +97,10 @@ protonize --prefix yiff DragNWash.exe -force-d3d11
 4. Turn and lean physically. The viewpoint should rotate and translate; character
    aim should follow headset direction during normal gameplay.
 5. Test left-stick movement and continuous right-stick turning, then release both sticks.
-6. Look at an interactable: a **Right trigger** label should appear in the headset.
-   Squeeze the right trigger. Also hold/release it away
-   from an interactable to test the existing hand action. Test the left trigger's
-   secondary action. Release triggers before re-enabling VR or returning from a menu.
+6. Look at an interactable: a **Left trigger** label should appear in the headset.
+   Squeeze the left trigger. Also hold/release it away
+   from an interactable to test the existing hand action. Test the right trigger's
+   tool action. Release triggers before re-enabling VR or returning from a menu.
 7. Press/hold/release right A to test jumping, then release and press again.
 8. Open a menu and switch VR off/on. Input should stop appropriately, and a rebuilt
    rig should recalibrate when rendering resumes.
@@ -107,7 +112,9 @@ initialization failure and passes headless Unity device/action checks.
 The user subsequently confirmed recovery, jumping,
 object interaction, and visible interaction text. Version 0.3.0 halves that text's
 size, corrects OpenVR trigger/grip confusion, and adds controller-pointed dialogue;
-these changes still require headset validation.
+the user subsequently confirmed dialogue rendering, continuing, and selecting answers.
+Version 0.3.1 fits panel height to its content, matches gameplay triggers to hands,
+and adds the progress HUD. These newest changes still need headset validation.
 Automated checks do not prove that a given game renderer or controller
 profile works correctly at runtime. In particular, if the world stays attached
 to the headset despite physical head rotation, that is a separate pose/rendering
@@ -135,6 +142,10 @@ Edit it while the game is closed.
 | Dialogue Width | 1.2 | Panel width in tracking-space meters |
 | Dialogue Distance | 1.6 | Initial distance from headset in tracking-space meters |
 | Pointer Pitch Offset | 0 | Adjust controller ray pitch in degrees if needed |
+| Show Progress HUD | true | Head-relative progress bars and equipped sponge supply |
+| HUD Scale | 1 | HUD size multiplier |
+| HUD Horizontal Offset | -0.65 | Upper-left edge horizontal position in head space |
+| HUD Vertical Offset | 0.48 | Upper-left edge vertical position in head space |
 
 Use this plugin's eye-height offset instead of UnityVRMod's eye-height/scene-pose
 offsets during gameplay: the companion controls the rig's position. UnityVRMod's
@@ -200,8 +211,16 @@ predicted frame time. OpenVR uses the right controller's tracked pose from the
 mod's existing compositor frame; adjust `Pointer Pitch Offset` if its forward
 direction differs from the comfortable pointing angle for your controller.
 
-This does not convert the remaining desktop menus, progress bars, inventory, or
-HUD into VR. Existing desktop mouse and keyboard controls remain available.
+The progress HUD reads the game's visible `UiProgressBar` values and respects
+hidden or disabled bars. Washing bars hide outside the washing phase, like the
+desktop group. **Soap coverage** is the dragon's soap coverage; **Sponge supply**
+is the equipped sponge's remaining fill, not that same percentage. Optional
+objective and dialogue-readiness bars appear when their desktop bars appear.
+The HUD occupies a single stereo surface at 1.2 tracking-space meters and follows
+head position and rotation to stay in the upper-left of the view. Adjust its size
+or offsets under `[UI]` in the config if needed.
+
+This does not convert the remaining desktop menus or inventory into VR. Existing desktop mouse and keyboard controls remain available.
 
 ## Validation and troubleshooting
 
@@ -220,7 +239,7 @@ the same structure layouts against installed Khronos OpenXR headers.
 The opt-in runtime tests exercise the actual startup input device, trigger/jump
 callbacks, transformed controller rays, answer pagination, disabled answers,
 panel recentering, and Yarn's reveal/advance/selection handlers. They can also
-render sample panels to `dist/dialogue-options.png` and `dist/dialogue-line.png`.
+render sample panels to `dist/dialogue-options.png` and `dist/dialogue-line.png`, plus `dist/progress-hud.png`.
 Close the game first, then use the same Wine/Proton environment as your normal
 launcher, passing its executable and subcommand to the wrapper. For this install:
 
