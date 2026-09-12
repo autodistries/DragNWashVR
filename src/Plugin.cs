@@ -25,6 +25,7 @@ namespace WalkNWash.VRCompanion
         private LookController look;
         private LocomotionController locomotion;
         private ActionButtons actionButtons;
+        private VrHands hands;
         private bool buttonInputFailed;
         private VrCrouch crouch;
         private bool crouchFailed;
@@ -110,6 +111,11 @@ namespace WalkNWash.VRCompanion
                 harmony?.UnpatchSelf();
                 Logger.LogError("Companion disabled: incompatible game/mod hooks. " + e);
             }
+            if (!failed)
+            {
+                try { hands = new VrHands(this, Config); }
+                catch (Exception e) { Logger.LogError("Controller hands unavailable; existing controls remain active. " + e); }
+            }
         }
 
         private IEnumerator Start()
@@ -166,6 +172,28 @@ namespace WalkNWash.VRCompanion
             && (GameStateManager.Instance == null || !GameStateManager.Instance.IsPaused);
         private bool CanAim => ControllerContext && MenuManager.actions.Player.Look.enabled;
         private bool CanControl => ControllerContext && MenuManager.actions.Player.Move.enabled;
+        internal bool HandsMode => VrActive && controllers.Value && calibrated && calibratedRig == backend.Rig;
+        internal Vector3 HandBodyEye => LookController.GetLookPosition();
+        internal void HandLog(string message) => Logger.LogInfo(message);
+        internal void HandPulse(int hand, float strength) => backend?.Pulse(hand, strength);
+        internal void HandInteraction(bool active) { if (locomotion != null) locomotion.IsInteracting = active; }
+        internal bool TryHandFrame(int hand, out HandFrame frame)
+        {
+            frame = default;
+            if (!ControllerContext || !controllers.Value || !backend.Hand(hand, false, out var position, out var rotation)) return false;
+            backend.Poll();
+            Quaternion yaw = Quaternion.Euler(0, rigYaw, 0);
+            float scale = backend.Rig.transform.localScale.x;
+            Vector3 anchor = HandBodyEye + Vector3.up * eyeOffset.Value;
+            if (!crouchFailed && crouch != null && physicalCrouch.Value && backend.HeadPose(out var head, out _))
+                anchor.y += crouch.EyeAdjustment(head.y, scale);
+            frame.Position = anchor + yaw * ((position - baseline) * scale);
+            frame.Rotation = yaw * rotation;
+            frame.Direction = backend.Hand(hand, true, out _, out var aim) ? yaw * aim * Vector3.forward : frame.Rotation * Vector3.forward;
+            frame.Curl = backend.Squeeze(hand);
+            frame.Trigger = hand == 1 ? backend.LeftTrigger : backend.RightTrigger;
+            return Backend.Finite(frame.Position) && Backend.Finite(frame.Rotation);
+        }
 
         private bool DialogueActive
         {
@@ -224,8 +252,10 @@ namespace WalkNWash.VRCompanion
             {
                 bool usable = Enabled && controllers.Value && ControllerContext;
                 if (usable) backend.Poll();
+                bool leftTracked = hands == null || !hands.Active || TryHandFrame(1, out _);
+                bool rightTracked = hands == null || !hands.Active || TryHandFrame(2, out _);
                 actionButtons.Update(MenuManager.actions, usable ? backend.LeftTrigger : 0,
-                    usable ? backend.RightTrigger : 0, usable && backend.Jump, usable);
+                    usable ? backend.RightTrigger : 0, usable && backend.Jump, usable, leftTracked, rightTracked);
             }
             catch (Exception e)
             {
@@ -453,6 +483,7 @@ namespace WalkNWash.VRCompanion
             current.Guard(() =>
             {
                 current.backend.Dispose();
+                current.hands?.RestoreAll();
                 current.prompt.Hide();
                 current.dialogue.Reset();
                 current.hud.Reset();
@@ -479,6 +510,7 @@ namespace WalkNWash.VRCompanion
             prompt.Dispose();
             dialogue.Dispose();
             hud.Dispose();
+            hands?.Dispose();
             try { actionButtons?.Dispose(); }
             catch (Exception e) { Logger.LogWarning("Button cleanup failed: " + e.Message); }
             finally

@@ -214,8 +214,10 @@ namespace WalkNWash.VRCompanion
         internal bool Hand(int hand, bool aim, ulong baseSpace, long time, out Vector3 position, out Quaternion rotation)
             => Locate(aim ? handAimActions[hand - 1] : gripActions[hand - 1],
                 aim ? handAimSpaces[hand - 1] : gripSpaces[hand - 1], baseSpace, time, out position, out rotation);
-        internal float Squeeze(int hand) => ReadTrigger(squeezeActions[hand - 1]);
-        internal void Pulse(int hand, float strength)
+        public bool Hand(int hand, bool aim, ulong space, long time, Array poses, out Vector3 position, out Quaternion rotation)
+            => Hand(hand, aim, space, time, out position, out rotation);
+        public float Squeeze(int hand) => ReadTrigger(squeezeActions[hand - 1]);
+        public void Pulse(int hand, float strength)
         {
             if (haptic == null) return;
             var info = new GetInfo { type = 59, action = hapticActions[hand - 1] };

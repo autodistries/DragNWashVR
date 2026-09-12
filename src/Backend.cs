@@ -130,26 +130,24 @@ namespace WalkNWash.VRCompanion
         {
             position = Vector3.zero; rotation = Quaternion.identity;
             if (hand < 1 || hand > 2 || !Focused) return false;
-            bool valid = false;
-            if (input is OpenXrInput xr)
-                valid = xr.Hand(hand, aim, Convert.ToUInt64(Field(Setup, "_appSpace")),
-                    Convert.ToInt64(Field(Field(Setup, "_xrFrameState"), "predictedDisplayTime")), out position, out rotation);
-            else if (input is OpenVrInput vr)
-                valid = vr.Hand(Field(Setup, "_trackedPoses") as Array, hand, out position, out rotation);
+            if (input == null) return false;
+            ulong space = IsOpenXr ? Convert.ToUInt64(Field(Setup, "_appSpace")) : 0;
+            long time = IsOpenXr ? Convert.ToInt64(Field(Field(Setup, "_xrFrameState"), "predictedDisplayTime")) : 0;
+            var poses = IsOpenXr ? null : Field(Setup, "_trackedPoses") as Array;
+            bool valid = input.Hand(hand, aim, space, time, poses, out position, out rotation);
             return valid && Finite(position) && Finite(rotation);
         }
         internal float Squeeze(int hand)
         {
             if (!Focused) return 0;
-            return input is OpenXrInput xr ? xr.Squeeze(hand) : input is OpenVrInput vr ? vr.Squeeze(hand) : 0;
+            return input?.Squeeze(hand) ?? 0;
         }
         internal void Pulse(int hand, float strength)
         {
             if (hapticsFailed || !Focused) return;
             try
             {
-                if (input is OpenXrInput xr) xr.Pulse(hand, strength);
-                else if (input is OpenVrInput vr) vr.Pulse(hand, strength);
+                input?.Pulse(hand, strength);
             }
             catch (Exception e) { hapticsFailed = true; log("Contact haptics stopped: " + e.Message); }
         }
@@ -173,6 +171,9 @@ namespace WalkNWash.VRCompanion
 
     internal interface IControllerInput : IDisposable
     {
+        bool Hand(int hand, bool aim, ulong space, long time, Array poses, out Vector3 position, out Quaternion rotation);
+        float Squeeze(int hand);
+        void Pulse(int hand, float strength);
         void Poll(out Vector2 move, out Vector2 turn, out float leftTrigger, out float rightTrigger, out bool jump, out bool hudToggle, out bool crouchToggle);
     }
 }

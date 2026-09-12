@@ -17,6 +17,9 @@
     <Compile Include="tests/RuntimeDialogueSmoke.cs" />
     <Compile Include="tests/RuntimeHudSmoke.cs" />
     <Compile Include="tests/RuntimeLocomotionSmoke.cs" />
+    <Compile Include="tests/RuntimeHandSmoke.cs" />
+    <Reference Include="$(GameDir)/DragNWash_Data/Managed/UnityEngine.AudioModule.dll" Private="false" />
+    <Reference Include="$(GameDir)/DragNWash_Data/Managed/com.gator-dragon-games.physics-audio.dll" Private="false" />
     <Reference Include="$(GameDir)/DragNWash_Data/Managed/UnityEngine.ImageConversionModule.dll" Private="false" />
   </ItemGroup>
   <ItemGroup>

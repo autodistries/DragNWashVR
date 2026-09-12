@@ -79,8 +79,10 @@ namespace WalkNWash.VRCompanion
             if (poses == null || index >= poses.Length) return false;
             return Backend.TrackedPose(poses.GetValue((int)index), out position, out rotation);
         }
-        internal float Squeeze(int hand) => squeeze[hand - 1];
-        internal void Pulse(int hand, float strength)
+        public bool Hand(int hand, bool aim, ulong space, long time, Array poses, out Vector3 position, out Quaternion rotation)
+            => Hand(poses, hand, out position, out rotation);
+        public float Squeeze(int hand) => squeeze[hand - 1];
+        public void Pulse(int hand, float strength)
         {
             uint index = (uint)role.Invoke(system, new[] { Enum.ToObject(roleType, hand) });
             if (index == uint.MaxValue) return;

@@ -15,7 +15,10 @@ namespace WalkNWash.VRCompanion
             public int _currentSessionState = 5;
             public ViewState _locatedViewState = new ViewState();
             public View[] _locatedViews = { new View(), new View() };
+            public ulong _appSpace = 1;
+            public FrameState _xrFrameState = new FrameState();
         }
+        private sealed class FrameState { public long predictedDisplayTime = 1; }
         private sealed class ViewState { public ulong viewStateFlags = 3; }
         private sealed class View { public Pose pose = new Pose(); }
         private sealed class Pose { public Position position = new Position(); public Rotation orientation = new Rotation(); }
@@ -99,6 +102,7 @@ namespace WalkNWash.VRCompanion
                 loco.PostureInput = 1; step();
                 check(loco.PostureInput == 1, "native jump posture retains priority through production hook");
                 check(!(bool)Backend.Field(plugin, "failed") && !(bool)Backend.Field(plugin, "crouchFailed"), "locomotion hooks remain enabled");
+                RuntimeHandSmoke.Run(plugin, backend, look, check);
             }
             finally
             {
