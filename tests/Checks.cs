@@ -92,6 +92,10 @@ internal static class Checks
         Near(ControlMath.SmoothTurn(-.6f, .2f, 90, 1f / 90), -.5f, "proportional left turn");
         Near(ControlMath.SmoothTurn(1, .2f, 90, 5), 9, "long frame cannot cause giant turn");
         var trigger = new TriggerButton();
+        Near(TriggerBinding.OpenVrValue(3, .8f, 0), .8f, "index trigger analog value");
+        Near(TriggerBinding.OpenVrValue(3, 0, (1UL << 2) | (1UL << 34)), 0, "grip cannot click through trigger axis");
+        Near(TriggerBinding.OpenVrValue(0, 1, (1UL << 2) | (1UL << 34)), 0, "grip cannot click through digital fallback");
+        Near(TriggerBinding.OpenVrValue(0, 0, 1UL << 33), 1, "index trigger digital fallback");
         Assert(!trigger.Update(1, true), "held trigger on startup does not click");
         Assert(!trigger.Update(0, true), "neutral arms trigger");
         Assert(trigger.Update(.8f, true), "trigger press");

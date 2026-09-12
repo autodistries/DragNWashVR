@@ -43,18 +43,18 @@ namespace WalkNWash.VRCompanion
             if (!(bool)state.Invoke(system, args)) return Vector2.zero;
             jump = JumpBinding.OpenVrPressed(hand, Convert.ToUInt64(Backend.Field(args[1], "ulButtonPressed")));
             int axis = 0;
-            int triggerAxis = -1;
+            int triggerType = 0;
             for (int i = 0; i < 5; i++)
             {
                 object[] propArgs = { index, Enum.ToObject(propertyType, 3002 + i), Enum.ToObject(errorType, 0) };
                 int axisType = (int)property.Invoke(system, propArgs);
                 if (Convert.ToInt32(propArgs[2]) != 0) continue;
                 if (axisType == 2) axis = i;
-                if (axisType == 3) triggerAxis = i;
+                if (i == 1) triggerType = axisType;
             }
-            trigger = triggerAxis >= 0
-                ? Convert.ToSingle(Backend.Field(Backend.Field(args[1], "rAxis" + triggerAxis), "x"))
-                : (Convert.ToUInt64(Backend.Field(args[1], "ulButtonPressed")) & (1UL << 33)) != 0 ? 1 : 0;
+            trigger = TriggerBinding.OpenVrValue(triggerType,
+                Convert.ToSingle(Backend.Field(Backend.Field(args[1], "rAxis1"), "x")),
+                Convert.ToUInt64(Backend.Field(args[1], "ulButtonPressed")));
             object value = Backend.Field(args[1], "rAxis" + axis);
             return new Vector2(Convert.ToSingle(Backend.Field(value, "x")), Convert.ToSingle(Backend.Field(value, "y")));
         }

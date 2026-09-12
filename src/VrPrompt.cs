@@ -25,7 +25,7 @@ namespace WalkNWash.VRCompanion
             text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             if (text.font == null) throw new InvalidOperationException("Built-in prompt font unavailable");
             text.fontSize = 64;
-            text.characterSize = .035f;
+            text.characterSize = .0175f;
             text.anchor = TextAnchor.MiddleCenter;
             text.alignment = TextAlignment.Center;
             text.color = Color.white;

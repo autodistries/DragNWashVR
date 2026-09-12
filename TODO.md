@@ -13,15 +13,25 @@ and button failures leave camera, sticks, and F10 active.
 
 Validation: 148 offline checks and 10 headless checks inside the actual Unity player
 passed, including the production input callback and trigger/jump action callbacks.
-Next task: confirm recovered controls in the headset before expanding features.
+User confirmed v0.2.2 works, including jumping, object interaction, and visible
+interaction text. Current task: controller-pointed dialogue panel, line advance,
+and answer selection. Keep dialogue failures isolated from working gameplay.
+
+- [x] Halve interaction prompt size.
+- [x] Fix OpenVR trigger selection: Axis1 is the index trigger; selecting the last
+  one-dimensional axis could read Axis2 squeeze/grip instead. OpenXR already uses
+  `/input/trigger/value`.
+- [ ] Show dialogue text and choices in VR.
+- [ ] Aim right controller at text/answer and use index trigger to activate it.
+- [ ] Verify dialogue clicks never trigger gameplay actions or skip two lines.
 
 ## Next: headset validation
 
-- [ ] Confirm v0.2.2 restores left-stick movement, camera follow, headset aim, and
+- [x] Confirm v0.2.2 restores left-stick movement, camera follow, headset aim, and
   F10. Check logs for `Companion ready` and `VR action buttons ready` with no
   companion startup/input errors. User confirmed these controls work in v0.1.0
   backup `BepInEx/companion-backups/20260912-011800-158473227/` and fail in later
-  builds; v0.2.2 has not yet been headset-tested.
+  builds; user now confirms v0.2.2 works.
 
 - [ ] Right A jumps; holding behaves like Space; release then press can jump again.
   A held while resuming VR or leaving a menu must not cause an accidental jump.
@@ -53,7 +63,7 @@ Fix failures from this list before starting the backlog. Record backend and rele
 
 ## Confirmed working by user
 
-These confirmations apply to v0.1.0, not the broken v0.2.0/v0.2.1 builds.
+Initial controls confirmed in v0.1.0; v0.2.2 recovery confirmed after the startup fix.
 
 - [x] Native VR startup through Proton/WiVRn.
 - [x] Left stick moves the character.
@@ -61,3 +71,6 @@ These confirmations apply to v0.1.0, not the broken v0.2.0/v0.2.1 builds.
 - [x] Camera follows the character.
 - [x] Headset rotation drives character look.
 - [x] F10 recenters over the character's feet.
+- [x] Right A jumps.
+- [x] Controller interaction works with objects (trigger/grip mapping correction pending retest).
+- [x] Interaction text appears in headset (half-size adjustment pending retest).
