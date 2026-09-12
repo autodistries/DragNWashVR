@@ -33,7 +33,7 @@ namespace WalkNWash.VRCompanion
             haptics = config.Bind("Hands", "Contact Haptics", true, "Brief feedback on contact and while rubbing.");
             fingers = config.Bind("Hands", "Idle Finger Curl", true, "Infer idle finger curl from grip and index trigger. Native animation owns active contact.");
             curlDegrees = config.Bind("Hands", "Finger Curl Degrees", -65f, new ConfigDescription("Idle curl angle per finger joint; negative bends the installed hand inward.", new AcceptableValueRange<float>(-90f, 90f)));
-            leftRotationOffset = config.Bind("Hands", "Left Hand Rotation Offset", new Vector3(0, 90, 90), "Local Euler correction for the left-hand mesh. Does not change controller aim or held tools; contact still aligns the palm to the surface.");
+            leftRotationOffset = config.Bind("Hands", "Left Hand Rotation Offset", new Vector3(15, 90, 90), "Local Euler correction for the left-hand mesh. Does not change controller aim or held tools; contact still aligns the palm to the surface.");
             dunk = config.Bind("Hands", "Direct Sponge Dunk", true, "Hold right trigger and place the sponge near a refill target to use its original refill action.");
             try
             {

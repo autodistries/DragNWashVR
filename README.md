@@ -207,7 +207,7 @@ legacy input emulation must expose that button. No alternative jump button is
 assigned to controllers without A. Like triggers, A must be released after resuming
 VR/focus or re-enabling the jump action before another press is accepted.
 
-## Controller hands (v0.5.2)
+## Controller hands (v0.5.3)
 
 The left hand and sponge use independent controller targets, with a close-contact
 probe followed by assisted forward reach. Reach is limited both from the controller
@@ -226,22 +226,24 @@ sampled from the existing mod session; simulation uses cached poses, so a small
 pose/render latency remains possible. Full joint tracking is not part of this
 build: idle finger poses are inferred from controller inputs.
 
-v0.5.2 pulls hand/tool origins back 10 cm in the tracking frame, including contact
+v0.5.3 pulls hand/tool origins back 15 cm in the tracking frame, including contact
 origins. This offset follows body turning, not head rotation, and leaves F10 feet
-placement unchanged. Build verified; the new distance needs headset confirmation.
+placement unchanged. The left hand also rolls 15 degrees right about its finger
+axis; surface contact still controls palm tilt. Build verified; distance and roll
+need headset confirmation.
 
 Settings in the `[Hands]` section:
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
 | Controller Hands | true | Enable hand targeting/presentation; false restores original behavior |
-| Hand Pullback | 0.10 | Pull both hand/tool origins backward, in meters before VR scaling; feet unchanged |
+| Hand Pullback | 0.15 | Pull both hand/tool origins backward, in meters before VR scaling; feet unchanged |
 | Assisted Reach | 1.5 | Forward reach in game units, also capped at 2 from character eyes |
 | Contact Probe Radius | 0.045 | Close-contact swept probe radius |
 | Contact Haptics | true | Short pulses on contact and movement while rubbing |
 | Idle Finger Curl | true | Infer idle finger pose from grip/index trigger |
 | Finger Curl Degrees | -65 | Per-joint inward curl for the installed hand |
-| Left Hand Rotation Offset | (0, 90, 90) | Local Euler mesh correction; controller aim and right tools stay unchanged |
+| Left Hand Rotation Offset | (15, 90, 90) | Local Euler mesh correction; controller aim and right tools stay unchanged |
 | Direct Sponge Dunk | true | Refill a used sponge near a valid refill target while right trigger is held |
 
 v0.5.1 removes the generated empty right hand and reverses the idle curl direction.

@@ -11,7 +11,7 @@ using UnityEngine.InputSystem.LowLevel;
 
 namespace WalkNWash.VRCompanion
 {
-    [BepInPlugin(Id, "Walk N Wash VR Companion", "0.5.2")]
+    [BepInPlugin(Id, "Walk N Wash VR Companion", "0.5.3")]
     [BepInDependency("com.newunitymodder.unityvrmod", BepInDependency.DependencyFlags.HardDependency)]
     [DefaultExecutionOrder(30000)]
     public sealed class Plugin : BaseUnityPlugin
@@ -64,7 +64,7 @@ namespace WalkNWash.VRCompanion
             enabledSetting = Config.Bind("General", "Enabled", true, "Enable player follow and input integration. Restart after changing this setting.");
             headAim = Config.Bind("Camera", "Headset Aims Character", true, "Drive game look/aim from headset orientation. Mouse/right stick turn the tracking origin.");
             eyeOffset = Config.Bind("Camera", "Eye Height Offset", 0f, "Additional eye height in game world units after recentering. Use this instead of UnityVRMod's eye offset.");
-            handPullback = Config.Bind("Hands", "Hand Pullback", .10f, new ConfigDescription("Move both hand/tool origins backward in the tracking frame, in meters before VR scaling. Does not change feet or rotate with head movement.", new AcceptableValueRange<float>(0f, .3f)));
+            handPullback = Config.Bind("Hands", "Hand Pullback", .15f, new ConfigDescription("Move both hand/tool origins backward in the tracking frame, in meters before VR scaling. Does not change feet or rotate with head movement.", new AcceptableValueRange<float>(0f, .3f)));
             recenterKey = Config.Bind("Camera", "Recenter Key", Key.F10, "Recalibrate current physical head position to character eyes. Stand or sit comfortably, then press this key.");
             controllers = Config.Bind("Input", "Enable Controllers", true, "Left stick moves; right stick turns. Keyboard and mouse remain available.");
             mouseTurn = Config.Bind("Input", "Mouse Turns Body", true, "With headset aim enabled, horizontal mouse/gamepad look turns the VR origin. Vertical look is ignored.");

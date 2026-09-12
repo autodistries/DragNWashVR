@@ -127,11 +127,11 @@ namespace WalkNWash.VRCompanion
                 Near(check, visual.position, left.Position, "native idle hook places hand at controller");
                 check(rubs == 0 && slaps == 0, "idle hand touching view ray cannot produce contact effects");
                 // Reproduce the reported grip: old mesh fingers (+Y) point right,
-                // old palm (+Z) points forward. The corrected mesh must point forward/down.
+                // old palm (+Z) points forward. Correct fingers forward, palm down with right roll.
                 input.LeftRotation = Quaternion.Euler(0, 0, -90);
                 tick(false);
                 Near(check, visual.up, Vector3.forward, "reported sideways fingers now point forward");
-                Near(check, visual.forward, Vector3.down, "reported forward palm now faces down");
+                Near(check, visual.forward, Quaternion.AngleAxis(-15, Vector3.forward) * Vector3.down, "corrected palm includes 15 degree right roll about fingers");
                 plugin.TryHandFrame(1, out var correctedFrame);
                 Near(check, correctedFrame.Direction, Vector3.forward, "left mesh alignment cannot rotate controller aim");
                 input.LeftRotation = Quaternion.Euler(0, 40, 0) * input.LeftRotation;
