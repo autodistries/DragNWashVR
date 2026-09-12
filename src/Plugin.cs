@@ -159,7 +159,7 @@ namespace WalkNWash.VRCompanion
             && !locomotion.HasCutscene
             && (GameStateManager.Instance == null || !GameStateManager.Instance.IsPaused);
         private bool CanAim => ControllerContext && MenuManager.actions.Player.Look.enabled;
-        private bool CanControl => ControllerContext && !locomotion.IsInteracting && MenuManager.actions.Player.Move.enabled;
+        private bool CanControl => ControllerContext && MenuManager.actions.Player.Move.enabled;
 
         private bool DialogueActive
         {
@@ -359,8 +359,7 @@ namespace WalkNWash.VRCompanion
             if (current == null || !current.Enabled) return;
             current.Guard(() =>
             {
-                if (!current.CanAim) { current.snapLatched = false; return; }
-                if (current.headAim.Value)
+                if (current.CanAim && current.headAim.Value)
                 {
                     if (current.mouseTurn.Value) current.rigYaw += current.look.LookInput.x;
                     current.look.LookInput = Vector2.zero;
@@ -369,7 +368,8 @@ namespace WalkNWash.VRCompanion
                 }
                 if (!current.controllers.Value || !current.CanControl) { current.snapLatched = false; return; }
                 current.backend.Poll();
-                if (current.smoothTurning.Value)
+                if (!current.CanAim) current.snapLatched = false;
+                else if (current.smoothTurning.Value)
                 {
                     current.snapLatched = false;
                     current.rigYaw += ControlMath.SmoothTurn(current.backend.Turn.x, current.deadzone.Value,
