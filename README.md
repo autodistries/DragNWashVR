@@ -207,7 +207,7 @@ legacy input emulation must expose that button. No alternative jump button is
 assigned to controllers without A. Like triggers, A must be released after resuming
 VR/focus or re-enabling the jump action before another press is accepted.
 
-## Controller hands (v0.5.1)
+## Controller hands (v0.5.2)
 
 The left hand and sponge use independent controller targets, with a close-contact
 probe followed by assisted forward reach. Reach is limited both from the controller
@@ -226,11 +226,16 @@ sampled from the existing mod session; simulation uses cached poses, so a small
 pose/render latency remains possible. Full joint tracking is not part of this
 build: idle finger poses are inferred from controller inputs.
 
+v0.5.2 pulls hand/tool origins back 10 cm in the tracking frame, including contact
+origins. This offset follows body turning, not head rotation, and leaves F10 feet
+placement unchanged. Build verified; the new distance needs headset confirmation.
+
 Settings in the `[Hands]` section:
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
 | Controller Hands | true | Enable hand targeting/presentation; false restores original behavior |
+| Hand Pullback | 0.10 | Pull both hand/tool origins backward, in meters before VR scaling; feet unchanged |
 | Assisted Reach | 1.5 | Forward reach in game units, also capped at 2 from character eyes |
 | Contact Probe Radius | 0.045 | Close-contact swept probe radius |
 | Contact Haptics | true | Short pulses on contact and movement while rubbing |
@@ -249,7 +254,7 @@ Upgrading from v0.5.0: change an existing `Finger Curl Degrees = 65` to `-65`;
 BepInEx preserves saved values when a default changes. The obsolete
 `Show Empty Right Hand` setting is ignored. This installation has been updated.
 
-Validation: 243 offline checks, native haptic ABI checks, and 110 Unity runtime
+v0.5.1 validation: 243 offline checks, native haptic ABI checks, and 110 Unity runtime
 checks passed. Runtime checks use simulated controller samples with actual game
 hand/sponge methods. They verify event positions/normals, supply consumption,
 fluid-emission calls, release, independent tracking loss, object eligibility and

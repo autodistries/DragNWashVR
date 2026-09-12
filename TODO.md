@@ -3,7 +3,7 @@
 Keep one implementation task active. Commit completed changes separately.
 An implemented feature is not hardware-verified until the user tests it.
 
-## Current focus: validate v0.5.1 hand corrections
+## Current focus: validate v0.5.2 hand distance
 
 Implemented: both controller poses; left hand/sponge contact and matching object
 selection; idle tracking; surface-compatible wrist twist; close-contact probes;
@@ -26,12 +26,17 @@ misaligned. v0.5.1 reverses curl, removes the empty right mesh, and adds a left-
 mesh rotation correction. Passive contact is restored; idle gameplay targets still
 clear to prevent stale rub/wash effects. Remaining headset checks follow.
 
+v0.5.2 pulls both hand/tool origins back 10 cm in the tracking frame (scaled with
+the VR rig), including their gameplay targets. Feet/F10 calibration is unchanged.
+Adjust `[Hands] Hand Pullback` if needed. Build verified; headset distance pending.
+
 ## Hand headset checks, in order
 
 - [x] User confirmed hand positions follow controllers and trigger moves fingers.
-- [ ] Hold left hand fingers-forward/palm-down: virtual hand matches. Curl bends
-  inward; active surface animation still works. Tune left mesh offset if needed.
-- [ ] Empty right controller shows nothing; equipping a tool shows only that object.
+- [x] User confirmed palm direction, inward finger curl, and no empty right hand.
+- [x] User confirmed F10 feet position.
+- [ ] v0.5.2: hands/tools now close enough; feet remain correct. Tune Hand Pullback.
+- [ ] Active surface animation still works; equipped right tool appears correctly.
 - [ ] Idle left hand retains original passive jiggle contact. Tracking loss disables it.
 - [ ] Hold left trigger: aim and rub with controller while looking elsewhere.
   Surface wrapping/slap animation remains; no stale rub/wash effects on release.
