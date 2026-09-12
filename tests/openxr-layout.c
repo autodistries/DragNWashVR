@@ -36,4 +36,9 @@ _Static_assert(XR_TYPE_ACTION_SPACE_CREATE_INFO == 38, "action space structure t
 _Static_assert(XR_TYPE_SPACE_LOCATION == 42, "space location structure type");
 _Static_assert(XR_TYPE_ACTION_STATE_POSE == 27, "pose state structure type");
 _Static_assert(XR_ACTION_TYPE_POSE_INPUT == 4, "pose action type");
+_Static_assert(sizeof(XrHapticVibration) == 32, "HapticVibration");
+_Static_assert(offsetof(XrHapticVibration, duration) == 16, "haptic duration");
+_Static_assert(offsetof(XrHapticVibration, amplitude) == 28, "haptic amplitude");
+_Static_assert(sizeof(XrHapticActionInfo) == sizeof(XrActionStateGetInfo), "haptic action info");
+_Static_assert(XR_TYPE_HAPTIC_ACTION_INFO == 59 && XR_TYPE_HAPTIC_VIBRATION == 13, "haptic types");
 int main(void) { return 0; }

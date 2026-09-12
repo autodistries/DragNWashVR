@@ -14,6 +14,7 @@ namespace WalkNWash.VRCompanion
         private bool inputAttempted;
         private readonly Action<string> log;
         private int pollFrame = -1;
+        private bool hapticsFailed;
         internal Vector2 Move, Turn;
         internal float LeftTrigger, RightTrigger;
         internal bool Jump, ToggleHud, ToggleCrouch;
@@ -124,6 +125,37 @@ namespace WalkNWash.VRCompanion
                     Convert.ToInt64(Field(Field(Setup, "_xrFrameState"), "predictedDisplayTime")), out position, out rotation);
             return input is OpenVrInput vr && vr.Aim(Field(Setup, "_trackedPoses") as Array, out position, out rotation);
         }
+
+        internal bool Hand(int hand, bool aim, out Vector3 position, out Quaternion rotation)
+        {
+            position = Vector3.zero; rotation = Quaternion.identity;
+            if (hand < 1 || hand > 2 || !Focused) return false;
+            bool valid = false;
+            if (input is OpenXrInput xr)
+                valid = xr.Hand(hand, aim, Convert.ToUInt64(Field(Setup, "_appSpace")),
+                    Convert.ToInt64(Field(Field(Setup, "_xrFrameState"), "predictedDisplayTime")), out position, out rotation);
+            else if (input is OpenVrInput vr)
+                valid = vr.Hand(Field(Setup, "_trackedPoses") as Array, hand, out position, out rotation);
+            return valid && Finite(position) && Finite(rotation);
+        }
+        internal float Squeeze(int hand)
+        {
+            if (!Focused) return 0;
+            return input is OpenXrInput xr ? xr.Squeeze(hand) : input is OpenVrInput vr ? vr.Squeeze(hand) : 0;
+        }
+        internal void Pulse(int hand, float strength)
+        {
+            if (hapticsFailed || !Focused) return;
+            try
+            {
+                if (input is OpenXrInput xr) xr.Pulse(hand, strength);
+                else if (input is OpenVrInput vr) vr.Pulse(hand, strength);
+            }
+            catch (Exception e) { hapticsFailed = true; log("Contact haptics stopped: " + e.Message); }
+        }
+        internal static bool Finite(Vector3 p) => CrouchState.Valid(p.x) && CrouchState.Valid(p.y) && CrouchState.Valid(p.z);
+        internal static bool Finite(Quaternion q) => CrouchState.Valid(q.x) && CrouchState.Valid(q.y) && CrouchState.Valid(q.z)
+            && CrouchState.Valid(q.w) && q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w > .5f;
 
         internal static bool TrackedPose(object pose, out Vector3 position, out Quaternion rotation)
         {

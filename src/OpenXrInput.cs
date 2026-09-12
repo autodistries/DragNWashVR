@@ -11,6 +11,10 @@ namespace WalkNWash.VRCompanion
         private readonly ulong instance, session;
         private ulong set, moveAction, turnAction, leftTriggerAction, rightTriggerAction, jumpAction;
         private ulong aimAction, aimSpace, hudToggleAction, crouchToggleAction;
+        private readonly ulong[] gripActions = new ulong[2], gripSpaces = new ulong[2];
+        private readonly ulong[] handAimActions = new ulong[2], handAimSpaces = new ulong[2];
+        private readonly ulong[] squeezeActions = new ulong[2], hapticActions = new ulong[2];
+        private ApplyHaptic haptic;
         private LocateSpace locateSpace;
         private ReadPose readPose;
         private DestroySet destroySpace;
@@ -52,6 +56,15 @@ namespace WalkNWash.VRCompanion
                 hudToggleAction = Create("toggle_hud", "Toggle progress HUD", 1);
                 crouchToggleAction = Create("toggle_crouch", "Override crouch", 1);
                 aimAction = Create("right_aim", "Point at dialogue", 4);
+                handAimActions[1] = aimAction;
+                handAimActions[0] = Create("left_aim", "Left hand aim", 4);
+                for (int i = 0; i < 2; i++)
+                {
+                    string side = i == 0 ? "left" : "right";
+                    gripActions[i] = Create(side + "_grip_pose", side + " hand pose", 4);
+                    squeezeActions[i] = Create(side + "_squeeze", side + " finger curl", 2);
+                    hapticActions[i] = Create(side + "_haptic", side + " contact feedback", 100);
+                }
                 var suggest = Load<Suggest>("xrSuggestInteractionProfileBindings");
                 string[] profiles = { "oculus/touch_controller", "valve/index_controller", "microsoft/motion_controller", "htc/vive_controller" };
                 int accepted = 0;
@@ -65,6 +78,15 @@ namespace WalkNWash.VRCompanion
                         new Binding { action = rightTriggerAction, path = Path("/user/hand/right/input/trigger/value") },
                         new Binding { action = aimAction, path = Path("/user/hand/right/input/aim/pose") }
                     };
+                    for (int i = 0; i < 2; i++)
+                    {
+                        string hand = "/user/hand/" + (i == 0 ? "left" : "right");
+                        profileBindings.Add(new Binding { action = gripActions[i], path = Path(hand + "/input/grip/pose") });
+                        if (i == 0) profileBindings.Add(new Binding { action = handAimActions[i], path = Path(hand + "/input/aim/pose") });
+                        profileBindings.Add(new Binding { action = hapticActions[i], path = Path(hand + "/output/haptic") });
+                        if (profile == "oculus/touch_controller" || profile == "valve/index_controller")
+                            profileBindings.Add(new Binding { action = squeezeActions[i], path = Path(hand + "/input/squeeze/value") });
+                    }
                     // Only profiles with an A button get this binding. An invalid
                     // path would reject the entire profile, including the sticks.
                     string jumpPath = JumpBinding.OpenXrPath(profile);
@@ -97,7 +119,21 @@ namespace WalkNWash.VRCompanion
                     locateSpace = Load<LocateSpace>("xrLocateSpace");
                     readPose = Load<ReadPose>("xrGetActionStatePose");
                     var spaceInfo = new ActionSpaceInfo { type = 38, action = aimAction, pose = new OpenXrNative.Pose { qw = 1 } };
-                    Check(Load<CreateSpace>("xrCreateActionSpace")(session, ref spaceInfo, out aimSpace), "xrCreateActionSpace");
+                    var createSpace = Load<CreateSpace>("xrCreateActionSpace");
+                    Check(createSpace(session, ref spaceInfo, out aimSpace), "xrCreateActionSpace");
+                    handAimSpaces[1] = aimSpace;
+                    for (int i = 0; i < 2; i++)
+                    {
+                        spaceInfo.action = gripActions[i];
+                        Check(createSpace(session, ref spaceInfo, out gripSpaces[i]), "grip space");
+                        if (i == 0)
+                        {
+                            spaceInfo.action = handAimActions[i];
+                            Check(createSpace(session, ref spaceInfo, out handAimSpaces[i]), "left aim space");
+                        }
+                    }
+                    try { haptic = Load<ApplyHaptic>("xrApplyHapticFeedback"); }
+                    catch (Exception e) { log("Contact haptics unavailable: " + e.Message); }
                 }
                 catch (Exception e) { log("Dialogue pointer unavailable; gameplay input remains active: " + e.Message); }
             }
@@ -161,22 +197,41 @@ namespace WalkNWash.VRCompanion
         }
         public void Dispose()
         {
-            if (aimSpace != 0) { destroySpace(aimSpace); aimSpace = 0; }
+            for (int i = 0; i < 2; i++)
+            {
+                if (gripSpaces[i] != 0) { destroySpace(gripSpaces[i]); gripSpaces[i] = 0; }
+                if (handAimSpaces[i] != 0) { destroySpace(handAimSpaces[i]); handAimSpaces[i] = 0; }
+            }
+            aimSpace = 0;
             active?.Dispose();
             active = null;
             if (set != 0) { destroy(set); set = 0; }
         }
 
         internal bool Aim(ulong baseSpace, long time, out Vector3 position, out Quaternion rotation)
+            => Locate(aimAction, aimSpace, baseSpace, time, out position, out rotation);
+
+        internal bool Hand(int hand, bool aim, ulong baseSpace, long time, out Vector3 position, out Quaternion rotation)
+            => Locate(aim ? handAimActions[hand - 1] : gripActions[hand - 1],
+                aim ? handAimSpaces[hand - 1] : gripSpaces[hand - 1], baseSpace, time, out position, out rotation);
+        internal float Squeeze(int hand) => ReadTrigger(squeezeActions[hand - 1]);
+        internal void Pulse(int hand, float strength)
+        {
+            if (haptic == null) return;
+            var info = new GetInfo { type = 59, action = hapticActions[hand - 1] };
+            var vibration = new HapticVibration { type = 13, duration = 20000000, amplitude = Mathf.Clamp01(strength) };
+            haptic(session, ref info, ref vibration);
+        }
+        private bool Locate(ulong action, ulong space, ulong baseSpace, long time, out Vector3 position, out Quaternion rotation)
         {
             position = Vector3.zero;
             rotation = Quaternion.identity;
-            if (aimSpace == 0 || baseSpace == 0 || time <= 0) return false;
-            var info = new GetInfo { type = 58, action = aimAction };
+            if (space == 0 || baseSpace == 0 || time <= 0) return false;
+            var info = new GetInfo { type = 58, action = action };
             var state = new PoseState { type = 27 };
             if (readPose(session, ref info, ref state) < 0 || state.isActive == 0) return false;
             var location = new SpaceLocation { type = 42 };
-            if (locateSpace(aimSpace, baseSpace, time, ref location) < 0 || (location.flags & 3) != 3) return false;
+            if (locateSpace(space, baseSpace, time, ref location) < 0 || (location.flags & 3) != 3) return false;
             var p = location.pose;
             position = new Vector3(p.x, p.y, -p.z);
             rotation = new Quaternion(p.qx, p.qy, -p.qz, -p.qw);

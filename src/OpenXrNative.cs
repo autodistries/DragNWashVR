@@ -117,6 +117,17 @@ namespace WalkNWash.VRCompanion
             internal uint isActive;
         }
 
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct HapticVibration
+        {
+            internal int type;
+            internal IntPtr next;
+            internal long duration;
+            internal float frequency, amplitude;
+        }
+        [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+        internal delegate int ApplyHaptic(ulong session, ref GetInfo info, ref HapticVibration vibration);
+
         [UnmanagedFunctionPointer(CallingConvention.Winapi)]
         internal delegate int CreateSpace(ulong session, ref ActionSpaceInfo info, out ulong space);
         [UnmanagedFunctionPointer(CallingConvention.Winapi)]

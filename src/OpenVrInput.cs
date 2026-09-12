@@ -12,6 +12,7 @@ namespace WalkNWash.VRCompanion
         private readonly object system;
         private readonly MethodInfo role, state, property;
         private readonly Type roleType, stateType, propertyType, errorType;
+        private readonly float[] squeeze = new float[2];
 
         internal OpenVrInput(object system)
         {
@@ -59,20 +60,32 @@ namespace WalkNWash.VRCompanion
                 Convert.ToSingle(Backend.Field(Backend.Field(args[1], "rAxis1"), "x")),
                 Convert.ToUInt64(Backend.Field(args[1], "ulButtonPressed")));
             object value = Backend.Field(args[1], "rAxis" + axis);
+            squeeze[hand - 1] = Mathf.Clamp01(Convert.ToSingle(Backend.Field(Backend.Field(args[1], "rAxis2"), "x")));
             return new Vector2(Convert.ToSingle(Backend.Field(value, "x")), Convert.ToSingle(Backend.Field(value, "y")));
         }
 
         public void Poll(out Vector2 move, out Vector2 turn, out float leftTrigger, out float rightTrigger, out bool jump, out bool hudToggle, out bool crouchToggle)
-        { move = Read(1, out leftTrigger, out _, out hudToggle, out crouchToggle); turn = Read(2, out rightTrigger, out jump, out _, out _); }
+        { squeeze[0] = squeeze[1] = 0; move = Read(1, out leftTrigger, out _, out hudToggle, out crouchToggle); turn = Read(2, out rightTrigger, out jump, out _, out _); }
         public void Dispose() { }
 
         internal bool Aim(Array poses, out Vector3 position, out Quaternion rotation)
+            => Hand(poses, 2, out position, out rotation);
+
+        internal bool Hand(Array poses, int hand, out Vector3 position, out Quaternion rotation)
         {
             position = Vector3.zero;
             rotation = Quaternion.identity;
-            uint index = (uint)role.Invoke(system, new[] { Enum.ToObject(roleType, 2) });
+            uint index = (uint)role.Invoke(system, new[] { Enum.ToObject(roleType, hand) });
             if (poses == null || index >= poses.Length) return false;
             return Backend.TrackedPose(poses.GetValue((int)index), out position, out rotation);
+        }
+        internal float Squeeze(int hand) => squeeze[hand - 1];
+        internal void Pulse(int hand, float strength)
+        {
+            uint index = (uint)role.Invoke(system, new[] { Enum.ToObject(roleType, hand) });
+            if (index == uint.MaxValue) return;
+            AccessTools.Method(system.GetType(), "TriggerHapticPulse")?.Invoke(system,
+                new object[] { index, 0u, (ushort)Mathf.Clamp(strength * 3999, 1, 3999) });
         }
     }
 }

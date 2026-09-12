@@ -172,6 +172,7 @@ internal static class Checks
         Size<FloatState>(40); Offset<FloatState>("lastChangeTime", 24); Offset<FloatState>("isActive", 32);
         Size<BooleanState>(40); Offset<BooleanState>("value", 16);
         Offset<BooleanState>("lastChangeTime", 24); Offset<BooleanState>("isActive", 32);
+        Size<HapticVibration>(32); Offset<HapticVibration>("duration", 16); Offset<HapticVibration>("amplitude", 28);
         Size<Pose>(28); Size<ActionSpaceInfo>(64); Offset<ActionSpaceInfo>("pose", 32);
         Size<SpaceLocation>(56); Offset<SpaceLocation>("flags", 16); Offset<SpaceLocation>("pose", 24);
         Size<PoseState>(24); Offset<PoseState>("isActive", 16);
