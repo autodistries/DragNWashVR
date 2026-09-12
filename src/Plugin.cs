@@ -11,7 +11,7 @@ using UnityEngine.InputSystem.LowLevel;
 
 namespace WalkNWash.VRCompanion
 {
-    [BepInPlugin(Id, "Walk N Wash VR Companion", "0.5.3")]
+    [BepInPlugin(Id, "Walk N Wash VR Companion", "0.5.4")]
     [BepInDependency("com.newunitymodder.unityvrmod", BepInDependency.DependencyFlags.HardDependency)]
     [DefaultExecutionOrder(30000)]
     public sealed class Plugin : BaseUnityPlugin
@@ -46,7 +46,7 @@ namespace WalkNWash.VRCompanion
         private ConfigEntry<bool> showPrompt;
         private ConfigEntry<bool> enabledSetting, headAim, controllers, mouseTurn, smoothTurning;
         private ConfigEntry<float> eyeOffset, deadzone, snapDegrees, turnSpeed;
-        private ConfigEntry<float> handPullback;
+        private ConfigEntry<float> handPullback, leftHandShift;
         private ConfigEntry<Key> recenterKey;
         private int scheduledFrame = -1, poseFrame = -1;
         private bool rendering, calibrated, snapLatched, failed;
@@ -65,6 +65,7 @@ namespace WalkNWash.VRCompanion
             headAim = Config.Bind("Camera", "Headset Aims Character", true, "Drive game look/aim from headset orientation. Mouse/right stick turn the tracking origin.");
             eyeOffset = Config.Bind("Camera", "Eye Height Offset", 0f, "Additional eye height in game world units after recentering. Use this instead of UnityVRMod's eye offset.");
             handPullback = Config.Bind("Hands", "Hand Pullback", .15f, new ConfigDescription("Move both hand/tool origins backward in the tracking frame, in meters before VR scaling. Does not change feet or rotate with head movement.", new AcceptableValueRange<float>(0f, .3f)));
+            leftHandShift = Config.Bind("Hands", "Left Hand Left Shift", .07f, new ConfigDescription("Move only the left hand origin left in the tracking frame, in meters before VR scaling.", new AcceptableValueRange<float>(0f, .3f)));
             recenterKey = Config.Bind("Camera", "Recenter Key", Key.F10, "Recalibrate current physical head position to character eyes. Stand or sit comfortably, then press this key.");
             controllers = Config.Bind("Input", "Enable Controllers", true, "Left stick moves; right stick turns. Keyboard and mouse remain available.");
             mouseTurn = Config.Bind("Input", "Mouse Turns Body", true, "With headset aim enabled, horizontal mouse/gamepad look turns the VR origin. Vertical look is ignored.");
@@ -190,7 +191,9 @@ namespace WalkNWash.VRCompanion
             Vector3 anchor = HandBodyEye + Vector3.up * eyeOffset.Value;
             if (!crouchFailed && crouch != null && physicalCrouch.Value)
                 anchor.y += crouch.EyeAdjustment(head.y, scale);
-            frame.Position = anchor + yaw * ((position - baseline + Vector3.back * handPullback.Value) * scale);
+            Vector3 offset = Vector3.back * handPullback.Value;
+            if (hand == 1) offset += Vector3.left * leftHandShift.Value;
+            frame.Position = anchor + yaw * ((position - baseline + offset) * scale);
             frame.Rotation = yaw * rotation;
             frame.Direction = backend.Hand(hand, true, out _, out var aim) ? yaw * aim * Vector3.forward : frame.Rotation * Vector3.forward;
             frame.Curl = backend.Squeeze(hand);

@@ -3,7 +3,7 @@
 Keep one implementation task active. Commit completed changes separately.
 An implemented feature is not hardware-verified until the user tests it.
 
-## Current focus: validate v0.5.3 hand distance and roll
+## Current focus: validate v0.5.4 left-hand placement
 
 Implemented: both controller poses; left hand/sponge contact and matching object
 selection; idle tracking; surface-compatible wrist twist; close-contact probes;
@@ -31,12 +31,15 @@ the VR rig), including their gameplay targets. Feet/F10 calibration is unchanged
 Left hand rolls 15 degrees right around its finger axis. Adjust `[Hands] Hand
 Pullback` and `Left Hand Rotation Offset` if needed. Build verified; headset check pending.
 
+v0.5.4 additionally shifts only the left hand/contact origin 7 cm left.
+Setting: `[Hands] Left Hand Left Shift`. Build verified; headset check pending.
+
 ## Hand headset checks, in order
 
 - [x] User confirmed hand positions follow controllers and trigger moves fingers.
 - [x] User confirmed palm direction, inward finger curl, and no empty right hand.
 - [x] User confirmed F10 feet position.
-- [ ] v0.5.3: hands/tools close enough, left hand roll comfortable, feet remain correct.
+- [ ] v0.5.4: left hand lateral placement, distance and roll feel correct; feet remain correct.
 - [ ] Active surface animation still works; equipped right tool appears correctly.
 - [ ] Idle left hand retains original passive jiggle contact. Tracking loss disables it.
 - [ ] Hold left trigger: aim and rub with controller while looking elsewhere.
@@ -132,3 +135,10 @@ Fix the first failing check before expanding scope. Record backend and relevant
 Known working pre-regression backup:
 `BepInEx/companion-backups/20260912-011800-158473227/` (v0.1.0).
 Later installs preserve their previous DLL in timestamped backup directories.
+
+
+
+# user todo
+- weird thing where if pressing f11 twice to stop and re-start the vr view, no vr view is visible, obly black
+- weird thing where vr can only grab/interact with certain objects  i.e. crowbar, water gun
+- we should remove the custom finger bending stuff for now

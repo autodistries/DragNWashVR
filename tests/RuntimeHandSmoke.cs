@@ -64,7 +64,7 @@ namespace WalkNWash.VRCompanion
                 Set(look, "lastViewMatrix", Matrix4x4.TRS(root.transform.position, Quaternion.identity, Vector3.one));
                 check(plugin.TryHandFrame(1, out var left) && plugin.TryHandFrame(2, out _), "both controller frames resolve independently");
                 plugin.TryHandFrame(2, out var right);
-                Near(check, right.Position - left.Position, new Vector3(.5f, 0, 0), "controller separation survives body mapping");
+                Near(check, right.Position - left.Position, new Vector3(.57f, 0, 0), "controller separation includes the left-only 7 cm shift");
                 Vector3 rightBefore = right.Position;
                 input.Left += Vector3.right * .1f;
                 plugin.TryHandFrame(1, out var translated); plugin.TryHandFrame(2, out right);

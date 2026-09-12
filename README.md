@@ -207,7 +207,7 @@ legacy input emulation must expose that button. No alternative jump button is
 assigned to controllers without A. Like triggers, A must be released after resuming
 VR/focus or re-enabling the jump action before another press is accepted.
 
-## Controller hands (v0.5.3)
+## Controller hands (v0.5.4)
 
 The left hand and sponge use independent controller targets, with a close-contact
 probe followed by assisted forward reach. Reach is limited both from the controller
@@ -232,11 +232,15 @@ placement unchanged. The left hand also rolls 15 degrees right about its finger
 axis; surface contact still controls palm tilt. Build verified; distance and roll
 need headset confirmation.
 
+v0.5.4 also shifts the left hand and its contact origin 7 cm left in the tracking
+frame. Right tools, hand pullback, and rotation retain their previous settings.
+
 Settings in the `[Hands]` section:
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
 | Controller Hands | true | Enable hand targeting/presentation; false restores original behavior |
+| Left Hand Left Shift | 0.07 | Shift only the left hand origin left, in meters before VR scaling |
 | Hand Pullback | 0.15 | Pull both hand/tool origins backward, in meters before VR scaling; feet unchanged |
 | Assisted Reach | 1.5 | Forward reach in game units, also capped at 2 from character eyes |
 | Contact Probe Radius | 0.045 | Close-contact swept probe radius |
