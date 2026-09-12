@@ -11,7 +11,7 @@ using UnityEngine.InputSystem.LowLevel;
 
 namespace WalkNWash.VRCompanion
 {
-    [BepInPlugin(Id, "Walk N Wash VR Companion", "0.3.2")]
+    [BepInPlugin(Id, "Walk N Wash VR Companion", "0.4.0")]
     [BepInDependency("com.newunitymodder.unityvrmod", BepInDependency.DependencyFlags.HardDependency)]
     [DefaultExecutionOrder(30000)]
     public sealed class Plugin : BaseUnityPlugin
@@ -26,6 +26,10 @@ namespace WalkNWash.VRCompanion
         private LocomotionController locomotion;
         private ActionButtons actionButtons;
         private bool buttonInputFailed;
+        private VrCrouch crouch;
+        private bool crouchFailed;
+        private ConfigEntry<bool> physicalCrouch;
+        private ConfigEntry<float> crouchThreshold;
         private readonly VrPrompt prompt = new VrPrompt();
         private readonly VrDialogue dialogue = new VrDialogue();
         private readonly VrHud hud = new VrHud();
@@ -65,6 +69,8 @@ namespace WalkNWash.VRCompanion
             snapDegrees = Config.Bind("Input", "Snap Turn Degrees", 30f, new ConfigDescription("One turn per right-stick deflection; release stick to turn again.", new AcceptableValueRange<float>(0f, 90f)));
             smoothTurning = Config.Bind("Input", "Smooth Turning", true, "Use continuous right-stick turning. Disable to use Snap Turn Degrees instead.");
             turnSpeed = Config.Bind("Input", "Smooth Turn Speed", 90f, new ConfigDescription("Degrees per second at full right-stick deflection.", new AcceptableValueRange<float>(0f, 360f)));
+            physicalCrouch = Config.Bind("Input", "Height Crouch", true, "Map calibrated physical height to kobold height and crouch when lowered. Left X overrides crouch/stand; F10 recalibrates and restores automatic mode.");
+            crouchThreshold = Config.Bind("Input", "Crouch Height Threshold", .75f, new ConfigDescription("Fraction of calibrated height below which crouch begins. Stand again 0.10 above this threshold. Calibrate comfortably upright with F10, standing or seated.", new AcceptableValueRange<float>(.4f, .9f)));
             showPrompt = Config.Bind("UI", "Show Interaction Prompt", true, "Display a world-space interaction hint in VR. Other desktop UI is unchanged.");
             showDialogue = Config.Bind("UI", "Show Dialogue", true, "Show dialogue text and answers in VR. Aim right controller and press its index trigger to continue or choose.");
             dialogueWidth = Config.Bind("UI", "Dialogue Width", 1.2f, new ConfigDescription("Dialogue panel width in tracking-space meters.", new AcceptableValueRange<float>(.5f, 2f)));
@@ -235,6 +241,7 @@ namespace WalkNWash.VRCompanion
             player = value;
             look = value.GetComponent<LookController>();
             locomotion = value.GetComponent<LocomotionController>();
+            crouch = null;
             calibrated = false;
         }
 
@@ -338,9 +345,23 @@ namespace WalkNWash.VRCompanion
                 rigYaw = look.LookYaw - rotation.eulerAngles.y;
                 calibrated = true;
                 calibratedRig = rig;
+                if (!crouchFailed)
+                {
+                    try
+                    {
+                        if (crouch == null) crouch = new VrCrouch(player);
+                        crouch.State.Calibrate(head.y);
+                    }
+                    catch (Exception e) { CrouchError(e); }
+                }
                 Logger.LogInfo("Camera calibrated to player eyes. Backend: " + (backend.IsOpenXr ? "OpenXR" : "OpenVR") + "; physical head: " + head);
             }
             Vector3 anchor = LookController.GetLookPosition() + Vector3.up * eyeOffset.Value;
+            if (!crouchFailed && crouch != null && physicalCrouch.Value)
+            {
+                try { anchor.y += crouch.EyeAdjustment(head.y, rig.transform.localScale.x); }
+                catch (Exception e) { CrouchError(e); }
+            }
             ControlMath.Origin(anchor.x, anchor.y, anchor.z, baseline.x, baseline.y, baseline.z,
                 rigYaw, rig.transform.localScale.x, out float x, out float y, out float z);
             rig.transform.SetPositionAndRotation(new Vector3(x, y, z), Quaternion.Euler(0, rigYaw, 0));
@@ -359,6 +380,7 @@ namespace WalkNWash.VRCompanion
             if (current == null || !current.Enabled) return;
             current.Guard(() =>
             {
+                current.UpdateCrouch();
                 if (current.CanAim && current.headAim.Value)
                 {
                     if (current.mouseTurn.Value) current.rigYaw += current.look.LookInput.x;
@@ -383,6 +405,31 @@ namespace WalkNWash.VRCompanion
                     current.locomotion.MoveInput = Quaternion.Euler(0, heading, 0) * new Vector3(x, 0, y);
                 }
             });
+        }
+        private void UpdateCrouch()
+        {
+            if (crouchFailed || crouch == null) return;
+            try
+            {
+                bool usable = ControllerContext && MenuManager.actions.Player.Crouch.enabled;
+                if (usable && controllers.Value) backend.Poll();
+                float height = float.NaN;
+                if (usable && backend.HeadPose(out var head, out _)) height = head.y;
+                bool automatic = crouch.State.Automatic, previous = crouch.State.Crouched;
+                crouch.State.Update(height, usable && controllers.Value && backend.ToggleCrouch,
+                    usable, physicalCrouch.Value, crouchThreshold.Value);
+                if (usable) locomotion.PostureInput = crouch.State.Posture(locomotion.PostureInput);
+                if (automatic != crouch.State.Automatic || previous != crouch.State.Crouched)
+                    Logger.LogInfo("VR crouch: " + (crouch.State.Crouched ? "crouched" : "standing")
+                        + (crouch.State.Automatic ? " (height)." : " (left X override; F10 restores height mode)."));
+            }
+            catch (Exception e) { CrouchError(e); }
+        }
+        private void CrouchError(Exception e)
+        {
+            crouchFailed = true;
+            crouch = null;
+            Logger.LogError("VR crouch disabled; other controls remain active. " + e);
         }
         private void ApplyAim()
         {

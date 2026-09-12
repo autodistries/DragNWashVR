@@ -10,7 +10,7 @@ namespace WalkNWash.VRCompanion
     {
         private readonly ulong instance, session;
         private ulong set, moveAction, turnAction, leftTriggerAction, rightTriggerAction, jumpAction;
-        private ulong aimAction, aimSpace, hudToggleAction;
+        private ulong aimAction, aimSpace, hudToggleAction, crouchToggleAction;
         private LocateSpace locateSpace;
         private ReadPose readPose;
         private DestroySet destroySpace;
@@ -50,6 +50,7 @@ namespace WalkNWash.VRCompanion
                 rightTriggerAction = Create("primary", "Interact or use hand", 2);
                 jumpAction = Create("jump", "Jump", 1);
                 hudToggleAction = Create("toggle_hud", "Toggle progress HUD", 1);
+                crouchToggleAction = Create("toggle_crouch", "Override crouch", 1);
                 aimAction = Create("right_aim", "Point at dialogue", 4);
                 var suggest = Load<Suggest>("xrSuggestInteractionProfileBindings");
                 string[] profiles = { "oculus/touch_controller", "valve/index_controller", "microsoft/motion_controller", "htc/vive_controller" };
@@ -70,6 +71,8 @@ namespace WalkNWash.VRCompanion
                     if (jumpPath != null) profileBindings.Add(new Binding { action = jumpAction, path = Path(jumpPath) });
                     string hudPath = HudToggleBinding.OpenXrPath(profile);
                     if (hudPath != null) profileBindings.Add(new Binding { action = hudToggleAction, path = Path(hudPath) });
+                    string crouchPath = CrouchBinding.OpenXrPath(profile);
+                    if (crouchPath != null) profileBindings.Add(new Binding { action = crouchToggleAction, path = Path(crouchPath) });
                     using (var bindings = new NativeArray<Binding>(profileBindings.ToArray()))
                     {
                         var suggested = new SuggestedBindings { type = 51, profile = Path("/interaction_profiles/" + profile), count = (uint)profileBindings.Count, bindings = bindings.Pointer };
@@ -139,11 +142,11 @@ namespace WalkNWash.VRCompanion
             Check(readBoolean(session, ref info, ref state), "xrGetActionStateBoolean");
             return state.isActive != 0 && state.value != 0;
         }
-        public void Poll(out Vector2 move, out Vector2 turn, out float leftTrigger, out float rightTrigger, out bool jump, out bool hudToggle)
+        public void Poll(out Vector2 move, out Vector2 turn, out float leftTrigger, out float rightTrigger, out bool jump, out bool hudToggle, out bool crouchToggle)
         {
             move = turn = Vector2.zero;
             leftTrigger = rightTrigger = 0;
-            jump = hudToggle = false;
+            jump = hudToggle = crouchToggle = false;
             var info = new SetList { type = 61, count = 1, sets = active.Pointer };
             int result = sync(session, ref info);
             if (result == 8) return; // XR_SESSION_NOT_FOCUSED: release all input.
@@ -154,6 +157,7 @@ namespace WalkNWash.VRCompanion
             rightTrigger = ReadTrigger(rightTriggerAction);
             jump = ReadButton(jumpAction);
             hudToggle = ReadButton(hudToggleAction);
+            crouchToggle = ReadButton(crouchToggleAction);
         }
         public void Dispose()
         {

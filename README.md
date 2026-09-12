@@ -18,11 +18,18 @@ Current work and pending headset checks: [TODO.md](TODO.md). Keep one task activ
 - First-person camera follows the player, with a calibrated physical head origin.
 - Headset direction drives character look/aim. Horizontal mouse or gamepad look
   turns the tracking origin; vertical mouse look is ignored in this mode.
-- Left VR thumbstick moves relative to headset heading.
+- Left VR thumbstick moves relative to headset heading, including while using
+  either hand/tool. The game retains its slower interaction movement speed.
 - Right VR thumbstick turns continuously, up to 90 degrees per second. Set
   `Smooth Turning = false` to use 30-degree snap turns instead.
 - **F10** recenters: your current physical head position becomes the character's
-  eye position. Use it while sitting or standing comfortably.
+  eye position. Use it while sitting or standing comfortably upright; this also
+  resets crouch calibration and returns to automatic height mode.
+- Lower your headset below **75%** of calibrated height to crouch; rise above
+  **85%** to stand. Vertical head motion maps proportionally to kobold eye height.
+  Physical lowering and the native crouch camera drop do not add together.
+- **Left X** overrides automatic posture: press to switch to the opposite posture,
+  then press again to toggle crouch/stand. **F10** restores automatic height mode.
 - **F11** remains UnityVRMod's VR/safe-mode toggle.
 - **Right controller A** jumps using `Player.Jump`, the same action as desktop
   Space. Press, hold, and release follow the game's normal jump behavior.
@@ -44,8 +51,8 @@ Current work and pending headset checks: [TODO.md](TODO.md). Keep one task activ
   available. These trigger bindings operate the game's existing hand/tool animations;
   free-moving hands and general VR menu clicking are not implemented.
 
-Controller movement respects the game's interaction lock. Headset aiming and
-trigger release remain active while using a hand/tool. Inputs respect disabled
+Controller movement, headset aiming, and trigger release remain active while
+using a hand/tool. Inputs respect disabled
 game actions, pause state, cutscenes, and VR focus. The headset view still follows
 the player during cutscenes; this build does not reproduce cinematic camera paths.
 Interactive dialogue captures VR gameplay input; automatic background dialogue
@@ -132,7 +139,9 @@ Edit it while the game is closed.
 | Headset Aims Character | true | Connect headset orientation to game aim |
 | Eye Height Offset | 0 | Additional game-world vertical offset |
 | Recenter Key | F10 | Recalibrate current physical head position |
-| Enable Controllers | true | Enable VR thumbstick bindings |
+| Enable Controllers | true | Enable VR thumbstick and button bindings |
+| Height Crouch | true | Map physical height to kobold height and crouch automatically; X still works when disabled |
+| Crouch Height Threshold | 0.75 | Enter crouch below this height fraction; exit 0.10 above it |
 | Mouse Turns Body | true | Allow horizontal desktop look to turn the rig |
 | Stick Deadzone | 0.2 | Filter thumbstick drift |
 | Smooth Turning | true | Continuous turning; disable for snap turns |
@@ -188,6 +197,29 @@ OpenVR reads `k_EButton_A` from the right controller's pressed-button mask. Runt
 legacy input emulation must expose that button. No alternative jump button is
 assigned to controllers without A. Like triggers, A must be released after resuming
 VR/focus or re-enabling the jump action before another press is accepted.
+
+## Crouch calibration
+
+Version 0.4.0 uses the tracked headset height from UnityVRMod's existing reference
+space. F10 records your comfortably upright position, standing or seated. Relative
+height changes map to the kobold's standing eye height, read from the game's saved
+capsule dimensions and ground spring length. World scale and horizontal tracking
+remain unchanged. Eye-level reference spaces with near-zero height use a 0.5 m
+reference range; F10 is especially useful after changing runtime recenter settings.
+
+Automatic crouch uses separate enter/exit thresholds to avoid flickering. Invalid
+head samples preserve the previous physical posture. Left X forces the opposite
+posture until another X press or F10; it must be released after calibration or
+input focus loss. OpenVR uses left button 7; OpenXR binds Touch X / Index left A.
+Vive and Microsoft motion-controller profiles keep their existing controls without
+an unsupported face-button binding.
+
+The companion supplies `LocomotionController.PostureInput`; the game's movement
+modes, collider interpolation, and blocked-headroom checks remain in charge of the
+body. Jump/stretch keeps priority. Automatic mode preserves desktop crouch input;
+manual X overrides it. Camera lowering uses the deeper of physical lowering and
+the game's crouch drop, avoiding a second drop when the collider contracts. This
+does not add collision detection for physical headset leaning.
 
 ## Interaction UI
 
@@ -245,7 +277,9 @@ the same structure layouts against installed Khronos OpenXR headers.
 
 The opt-in runtime tests exercise the actual startup input device, trigger/jump
 callbacks, transformed controller rays, answer pagination, disabled answers,
-panel recentering, and Yarn's reveal/advance/selection handlers. They can also
+panel recentering, Yarn's reveal/advance/selection handlers, and the production
+movement/crouch hook using simulated cached headset poses. Native hardware input
+and comfort still require a headset test. They can also
 render sample panels to `dist/dialogue-options.png` and `dist/dialogue-line.png`, plus `dist/progress-hud.png`.
 Close the game first, then use the same Wine/Proton environment as your normal
 launcher, passing its executable and subcommand to the wrapper. For this install:

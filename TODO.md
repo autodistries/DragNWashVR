@@ -3,20 +3,29 @@
 Keep one implementation task active. Commit completed changes separately.
 An implemented feature is not hardware-verified until the user tests it.
 
-## Current focus: validate v0.3.2 HUD toggle and placement
+## Current focus: validate v0.4.0 crouch and hand-use movement
 
-Implemented: left Y toggles HUD visibility once per press and saves it. HUD moved
-right/down (horizontal -0.5, vertical 0.4). Previous compact dialogue, hand mapping,
-and progress values remain implemented. Height-based crouch/X override and
-controller-driven hand poses are recorded below for later.
+Implemented: height-based crouch (enter 75%, exit 85%), proportional vertical
+mapping to kobold height, left X forced crouch/stand, F10 reset to automatic mode.
+Native capsule/headroom handling remains active; physical and game camera drops
+do not stack. Removed the companion's hand-use movement block; native slower
+interaction movement remains. Height failures are isolated from other controls.
 
-Validation: 203 offline checks and 44 checks inside the actual Unity player
-passed. Rendered previews inspected. Tests cover compact panel hit targets,
-pagination, Yarn callbacks, left/right action mapping, live desktop bar values,
-hidden bars, HUD positioning after head/rig transforms, and stale row removal.
-Headset readability and live washing/tool changes still need user validation.
+Validation: 240 offline checks and 55 checks inside Unity passed. New runtime
+checks exercise the production movement/posture hook, active hands, disabled look
+and move actions, cutscenes, focus loss, cached headset height, X and jump priority.
+Headset comfort and actual crouch thresholds still need user validation.
 
 ## Next: headset checks, in order
+
+- [ ] Stand or sit comfortably upright and press F10. Lower head: crouch below
+  75%; rise above 85%: stand. Eye should not drop twice when crouch activates.
+- [ ] Left X forces opposite posture; holding does not flicker; another press
+  toggles back. F10 restores automatic height mode. Y/right A remain separate.
+- [ ] Try standing under low headroom: native collider must remain blocked.
+  Check jump, tracking/focus loss, F11, and seated recalibration.
+- [ ] Move with left stick while holding left trigger, right trigger, and both.
+  Game's slower interaction speed is expected; pause/dialogue must still block.
 
 - [ ] Left Y hides HUD; release/press shows it again. Holding Y must not flicker.
   X, right B, triggers, and grips must not toggle it. Visibility survives restart.
@@ -39,13 +48,6 @@ Fix the first failing check before expanding scope. Record backend and relevant
 `BepInEx/LogOutput.log` messages with each failure.
 
 ## Backlog: not started
-
-- [ ] Height-driven crouch: compare tracked head height to a calibrated standing
-  baseline; crouch when lowered and stand when raised. Use separate enter/exit
-  thresholds to avoid flicker. Support seated calibration and F10 recentering;
-  do not count the game's own crouch camera offset as physical head movement.
-  Left-controller X must override automatic crouch. Define a clear way to resume
-  automatic mode, and preserve safe posture on tracking loss or blocked headroom.
 
 - [ ] Inventory other missing UI (inventory, menus); choose one concrete screen next.
 - [ ] General VR menu interaction.

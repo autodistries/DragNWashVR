@@ -60,7 +60,8 @@ namespace WalkNWash.VRCompanion
                 }
                 RuntimeDialogueSmoke.Run(check);
                 RuntimeHudSmoke.Run(check);
-                log.LogInfo("RUNTIME SMOKE PASS: " + count + " Unity input/dialogue/HUD checks.");
+                RuntimeLocomotionSmoke.Run(check);
+                log.LogInfo("RUNTIME SMOKE PASS: " + count + " Unity input/dialogue/HUD/locomotion checks.");
                 Application.Quit(0);
             }
             catch (Exception e)

@@ -33,17 +33,18 @@ namespace WalkNWash.VRCompanion
             return method != null && (bool)method.Invoke(system, null);
         }
 
-        private Vector2 Read(int hand, out float trigger, out bool jump, out bool hudToggle)
+        private Vector2 Read(int hand, out float trigger, out bool jump, out bool hudToggle, out bool crouchToggle)
         {
             trigger = 0;
             jump = false;
-            hudToggle = false;
+            hudToggle = crouchToggle = false;
             uint index = (uint)role.Invoke(system, new[] { Enum.ToObject(roleType, hand) });
             if (index == uint.MaxValue) return Vector2.zero;
             object[] args = { index, Activator.CreateInstance(stateType), (uint)Marshal.SizeOf(stateType) };
             if (!(bool)state.Invoke(system, args)) return Vector2.zero;
             jump = JumpBinding.OpenVrPressed(hand, Convert.ToUInt64(Backend.Field(args[1], "ulButtonPressed")));
             hudToggle = HudToggleBinding.OpenVrPressed(hand, Convert.ToUInt64(Backend.Field(args[1], "ulButtonPressed")));
+            crouchToggle = CrouchBinding.OpenVrPressed(hand, Convert.ToUInt64(Backend.Field(args[1], "ulButtonPressed")));
             int axis = 0;
             int triggerType = 0;
             for (int i = 0; i < 5; i++)
@@ -61,8 +62,8 @@ namespace WalkNWash.VRCompanion
             return new Vector2(Convert.ToSingle(Backend.Field(value, "x")), Convert.ToSingle(Backend.Field(value, "y")));
         }
 
-        public void Poll(out Vector2 move, out Vector2 turn, out float leftTrigger, out float rightTrigger, out bool jump, out bool hudToggle)
-        { move = Read(1, out leftTrigger, out _, out hudToggle); turn = Read(2, out rightTrigger, out jump, out _); }
+        public void Poll(out Vector2 move, out Vector2 turn, out float leftTrigger, out float rightTrigger, out bool jump, out bool hudToggle, out bool crouchToggle)
+        { move = Read(1, out leftTrigger, out _, out hudToggle, out crouchToggle); turn = Read(2, out rightTrigger, out jump, out _, out _); }
         public void Dispose() { }
 
         internal bool Aim(Array poses, out Vector3 position, out Quaternion rotation)

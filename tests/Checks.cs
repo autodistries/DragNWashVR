@@ -75,6 +75,7 @@ internal static class Checks
 
     private static int Main(string[] args)
     {
+        CrouchChecks();
         ControlMath.Deadzone(.1f, -.1f, .2f, out var x, out var y);
         Near(x, 0, "resting stick x"); Near(y, 0, "resting stick y");
         ControlMath.Deadzone(.6f, 0, .2f, out x, out y);
@@ -211,6 +212,10 @@ internal static class Checks
             Method(look, "SetLookRotation", 1, "System.Void");
             Field(look, "smoothedLook", "UnityEngine.Vector2");
             Field(look, "smoothingVelocity", "UnityEngine.Vector2");
+            Field(look, "viewTopDistance", "System.Single");
+            Field(look, "capsuleSmoothdamp", "System.Single");
+            foreach (var name in new[] { "defaultBottomOffset", "defaultCapsuleHeight", "defaultSpringLength" })
+                Field(Type(module, "MassSpringController"), name, "System.Single");
         }
         using (var module = ModuleDefinition.ReadModule(Path.Combine(game, "DragNWash_Data/Managed/YarnSpinner.Unity.dll")))
         {
@@ -239,5 +244,65 @@ internal static class Checks
         }
         Console.WriteLine(count + " checks passed (math, native ABI, installed game/mod signatures).");
         return 0;
+    }
+
+    private static void CrouchChecks()
+    {
+        Assert(CrouchBinding.OpenVrPressed(1, 1UL << 7), "left X crouch binding");
+        Assert(!CrouchBinding.OpenVrPressed(2, 1UL << 7), "right A cannot override crouch");
+        Assert(!CrouchBinding.OpenVrPressed(1, (1UL << 1) | (1UL << 2) | (1UL << 33)), "Y/grip/trigger cannot override crouch");
+        Assert(CrouchBinding.OpenXrPath("oculus/touch_controller") == "/user/hand/left/input/x/click", "Touch X path");
+        Assert(CrouchBinding.OpenXrPath("valve/index_controller") == "/user/hand/left/input/a/click", "Index left A path");
+        Assert(CrouchBinding.OpenXrPath("htc/vive_controller") == null && CrouchBinding.OpenXrPath("microsoft/motion_controller") == null,
+            "no unsupported crouch path rejects a controller profile");
+        var state = new CrouchState();
+        state.Calibrate(1.8f);
+        state.Update(1.8f, true, true, true, .75f);
+        Assert(state.Automatic && !state.Crouched, "held X at calibration ignored");
+        state.Update(1.8f, false, true, true, .75f);
+        state.Update(1.3f, false, true, true, .75f);
+        Assert(state.Crouched, "physical lowering crouches");
+        state.Update(1.45f, false, true, true, .75f);
+        Assert(state.Crouched, "height hysteresis avoids flicker");
+        state.Update(float.NaN, false, true, true, .75f);
+        Assert(state.Crouched, "tracking loss preserves posture");
+        state.Update(float.PositiveInfinity, false, true, true, .75f);
+        Assert(state.Crouched, "infinite tracking sample ignored");
+        state.Update(1.6f, false, false, true, .75f);
+        Assert(state.Crouched, "disabled context cannot change physical posture");
+        state.Update(1.6f, false, true, true, .75f);
+        Assert(!state.Crouched, "rising past exit threshold stands");
+        state.Update(1.8f, true, true, true, .75f);
+        Assert(state.Crouched && !state.Automatic, "X forces crouch while standing");
+        state.Update(1.8f, true, true, true, .75f);
+        Assert(state.Crouched, "holding X does not retoggle");
+        state.Update(1.2f, false, true, true, .75f);
+        state.Update(1.2f, true, true, true, .75f);
+        Assert(!state.Crouched && !state.Automatic, "X forces stand despite physical crouch");
+        Near(state.Posture(-1), 0, "manual stand overrides crouch input");
+        Near(state.Posture(1), 1, "jump/stretch keeps priority");
+        state.Update(1.2f, true, false, true, .75f);
+        state.Update(1.2f, true, true, true, .75f);
+        Assert(!state.Crouched, "held X on resume does not retoggle");
+        state.Calibrate(.8f);
+        Assert(state.Automatic && !state.Crouched, "F10 clears manual override and resets seated baseline");
+        state.Update(.59f, false, true, true, .75f);
+        Assert(state.Crouched, "seated height uses proportional threshold");
+        Near(state.Posture(0), -1, "automatic crouch requests native posture");
+        Near(state.Posture(1), 1, "physical crouch does not suppress jump");
+        state.Update(.8f, false, true, false, .75f);
+        Assert(!state.Crouched, "height setting disables automatic crouch");
+        Near(state.Posture(-1), -1, "desktop crouch remains available in automatic mode");
+        state.Calibrate(0);
+        state.Update(-.15f, false, true, true, .75f);
+        Assert(state.Crouched, "eye-level reference space uses finite fallback height");
+        state.Calibrate(2);
+        // Reconstruct final eye delta: native capsule drop + raw tracked delta + correction.
+        Near(-.5f + state.EyeAdjustment(1.5f, 1, 0, 1), -.25f, "human height maps proportionally to kobold");
+        Near(-.5f - .4f + state.EyeAdjustment(1.5f, 1, -.4f, 1), -.4f, "physical and native crouch do not double-drop");
+        Near(-.4f + state.EyeAdjustment(2, 1, -.4f, 1), -.4f, "standing user gets manual/blocked-headroom capsule drop");
+        Near(-1f - .4f + state.EyeAdjustment(1.5f, 1, -.4f, 2), -.4f, "height compensation works at non-default world scale");
+        Near(-2f + state.EyeAdjustment(0, 1, 0, 1), -.85f, "deep kneeling eye stays above feet");
+        Near(.2f + state.EyeAdjustment(2, 1, .2f, 1), .2f, "game stretch is preserved");
     }
 }

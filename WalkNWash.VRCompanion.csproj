@@ -3,7 +3,7 @@
     <TargetFramework>netstandard2.1</TargetFramework>
     <LangVersion>latest</LangVersion>
     <AssemblyName>WalkNWash.VRCompanion</AssemblyName>
-    <Version>0.3.2</Version>
+    <Version>0.4.0</Version>
     <GameDir Condition="'$(GameDir)' == ''">$(MSBuildProjectDirectory)/..</GameDir>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
@@ -16,6 +16,7 @@
     <Compile Include="tests/RuntimeSmoke.cs" />
     <Compile Include="tests/RuntimeDialogueSmoke.cs" />
     <Compile Include="tests/RuntimeHudSmoke.cs" />
+    <Compile Include="tests/RuntimeLocomotionSmoke.cs" />
     <Reference Include="$(GameDir)/DragNWash_Data/Managed/UnityEngine.ImageConversionModule.dll" Private="false" />
   </ItemGroup>
   <ItemGroup>

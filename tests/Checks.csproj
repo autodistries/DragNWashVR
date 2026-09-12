@@ -7,6 +7,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Checks.cs" />
+    <Compile Include="../src/CrouchState.cs" Link="CrouchState.cs" />
     <Compile Include="../src/ControlMath.cs" Link="ControlMath.cs" />
     <Compile Include="../src/TriggerButton.cs" Link="TriggerButton.cs" />
     <Compile Include="../src/TriggerBinding.cs" Link="TriggerBinding.cs" />
