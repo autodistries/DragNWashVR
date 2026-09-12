@@ -10,7 +10,7 @@ namespace WalkNWash.VRCompanion
     {
         private readonly ulong instance, session;
         private ulong set, moveAction, turnAction, leftTriggerAction, rightTriggerAction, jumpAction;
-        private ulong aimAction, aimSpace;
+        private ulong aimAction, aimSpace, hudToggleAction;
         private LocateSpace locateSpace;
         private ReadPose readPose;
         private DestroySet destroySpace;
@@ -49,6 +49,7 @@ namespace WalkNWash.VRCompanion
                 leftTriggerAction = Create("secondary", "Secondary action", 2);
                 rightTriggerAction = Create("primary", "Interact or use hand", 2);
                 jumpAction = Create("jump", "Jump", 1);
+                hudToggleAction = Create("toggle_hud", "Toggle progress HUD", 1);
                 aimAction = Create("right_aim", "Point at dialogue", 4);
                 var suggest = Load<Suggest>("xrSuggestInteractionProfileBindings");
                 string[] profiles = { "oculus/touch_controller", "valve/index_controller", "microsoft/motion_controller", "htc/vive_controller" };
@@ -67,6 +68,8 @@ namespace WalkNWash.VRCompanion
                     // path would reject the entire profile, including the sticks.
                     string jumpPath = JumpBinding.OpenXrPath(profile);
                     if (jumpPath != null) profileBindings.Add(new Binding { action = jumpAction, path = Path(jumpPath) });
+                    string hudPath = HudToggleBinding.OpenXrPath(profile);
+                    if (hudPath != null) profileBindings.Add(new Binding { action = hudToggleAction, path = Path(hudPath) });
                     using (var bindings = new NativeArray<Binding>(profileBindings.ToArray()))
                     {
                         var suggested = new SuggestedBindings { type = 51, profile = Path("/interaction_profiles/" + profile), count = (uint)profileBindings.Count, bindings = bindings.Pointer };
@@ -129,18 +132,18 @@ namespace WalkNWash.VRCompanion
             Check(readFloat(session, ref info, ref state), "xrGetActionStateFloat");
             return state.isActive != 0 ? state.value : 0;
         }
-        private bool ReadJump()
+        private bool ReadButton(ulong action)
         {
-            var info = new GetInfo { type = 58, action = jumpAction };
+            var info = new GetInfo { type = 58, action = action };
             var state = new BooleanState { type = 23 };
             Check(readBoolean(session, ref info, ref state), "xrGetActionStateBoolean");
             return state.isActive != 0 && state.value != 0;
         }
-        public void Poll(out Vector2 move, out Vector2 turn, out float leftTrigger, out float rightTrigger, out bool jump)
+        public void Poll(out Vector2 move, out Vector2 turn, out float leftTrigger, out float rightTrigger, out bool jump, out bool hudToggle)
         {
             move = turn = Vector2.zero;
             leftTrigger = rightTrigger = 0;
-            jump = false;
+            jump = hudToggle = false;
             var info = new SetList { type = 61, count = 1, sets = active.Pointer };
             int result = sync(session, ref info);
             if (result == 8) return; // XR_SESSION_NOT_FOCUSED: release all input.
@@ -149,7 +152,8 @@ namespace WalkNWash.VRCompanion
             turn = Read(turnAction);
             leftTrigger = ReadTrigger(leftTriggerAction);
             rightTrigger = ReadTrigger(rightTriggerAction);
-            jump = ReadJump();
+            jump = ReadButton(jumpAction);
+            hudToggle = ReadButton(hudToggleAction);
         }
         public void Dispose()
         {

@@ -3,19 +3,24 @@
 Keep one implementation task active. Commit completed changes separately.
 An implemented feature is not hardware-verified until the user tests it.
 
-## Current focus: validate v0.3.1 UI and hand mapping
+## Current focus: validate v0.3.2 HUD toggle and placement
 
-Implemented: dialogue height fits text/answers; gameplay triggers match hands;
-upper-left progress HUD follows headset position/orientation. Controller-driven
-hand poses are deferred as requested.
+Implemented: left Y toggles HUD visibility once per press and saves it. HUD moved
+right/down (horizontal -0.5, vertical 0.4). Previous compact dialogue, hand mapping,
+and progress values remain implemented. Height-based crouch/X override and
+controller-driven hand poses are recorded below for later.
 
-Validation: 186 offline checks and 44 checks inside the actual Unity player
+Validation: 203 offline checks and 44 checks inside the actual Unity player
 passed. Rendered previews inspected. Tests cover compact panel hit targets,
 pagination, Yarn callbacks, left/right action mapping, live desktop bar values,
 hidden bars, HUD positioning after head/rig transforms, and stale row removal.
 Headset readability and live washing/tool changes still need user validation.
 
 ## Next: headset checks, in order
+
+- [ ] Left Y hides HUD; release/press shows it again. Holding Y must not flicker.
+  X, right B, triggers, and grips must not toggle it. Visibility survives restart.
+- [ ] HUD sits further right and slightly lower; still stays fixed in the view.
 
 - [ ] Dialogue boxes use less height; short lines have no large blank area.
   Long lines and wrapped answers remain readable; clicking/pagination still works.

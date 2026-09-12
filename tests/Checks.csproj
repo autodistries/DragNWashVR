@@ -11,6 +11,7 @@
     <Compile Include="../src/TriggerButton.cs" Link="TriggerButton.cs" />
     <Compile Include="../src/TriggerBinding.cs" Link="TriggerBinding.cs" />
     <Compile Include="../src/JumpBinding.cs" Link="JumpBinding.cs" />
+    <Compile Include="../src/HudToggle.cs" Link="HudToggle.cs" />
     <Compile Include="../src/OpenXrNative.cs" Link="OpenXrNative.cs" />
     <Reference Include="$(GameDir)/BepInEx/core/Mono.Cecil.dll" Private="true" />
   </ItemGroup>

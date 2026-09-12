@@ -16,7 +16,7 @@ namespace WalkNWash.VRCompanion
         private int pollFrame = -1;
         internal Vector2 Move, Turn;
         internal float LeftTrigger, RightTrigger;
-        internal bool Jump;
+        internal bool Jump, ToggleHud;
         private static readonly Dictionary<string, FieldInfo> fields = new Dictionary<string, FieldInfo>();
 
         internal Backend(object setup, Action<string> log)
@@ -66,9 +66,9 @@ namespace WalkNWash.VRCompanion
             pollFrame = Time.frameCount;
             Move = Turn = Vector2.zero;
             LeftTrigger = RightTrigger = 0;
-            Jump = false;
+            Jump = ToggleHud = false;
             if (input == null || !Focused) return;
-            try { input.Poll(out Move, out Turn, out LeftTrigger, out RightTrigger, out Jump); }
+            try { input.Poll(out Move, out Turn, out LeftTrigger, out RightTrigger, out Jump, out ToggleHud); }
             catch (Exception e)
             {
                 log("Controller polling stopped: " + e.Message);
@@ -76,7 +76,7 @@ namespace WalkNWash.VRCompanion
                 input = null;
                 Move = Turn = Vector2.zero;
                 LeftTrigger = RightTrigger = 0;
-                Jump = false;
+                Jump = ToggleHud = false;
             }
         }
 
@@ -141,6 +141,6 @@ namespace WalkNWash.VRCompanion
 
     internal interface IControllerInput : IDisposable
     {
-        void Poll(out Vector2 move, out Vector2 turn, out float leftTrigger, out float rightTrigger, out bool jump);
+        void Poll(out Vector2 move, out Vector2 turn, out float leftTrigger, out float rightTrigger, out bool jump, out bool hudToggle);
     }
 }

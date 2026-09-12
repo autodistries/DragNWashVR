@@ -38,7 +38,8 @@ Current work and pending headset checks: [TODO.md](TODO.md). Keep one task activ
   clickable **Previous / Next** page controls. Panel height fits its text and visible
   answers; short lines no longer reserve a large empty box. **F10** places the panel in front again.
 - A compact upper-left HUD follows headset orientation and shows the visible game
-  progress bars plus **Sponge supply** when the sponge is equipped.
+  progress bars plus **Sponge supply** when the sponge is equipped. **Left Y**
+  toggles the HUD; its visibility setting is saved.
 - Keyboard movement, gamepad movement, and existing interaction keys remain
   available. These trigger bindings operate the game's existing hand/tool animations;
   free-moving hands and general VR menu clicking are not implemented.
@@ -144,8 +145,8 @@ Edit it while the game is closed.
 | Pointer Pitch Offset | 0 | Adjust controller ray pitch in degrees if needed |
 | Show Progress HUD | true | Head-relative progress bars and equipped sponge supply |
 | HUD Scale | 1 | HUD size multiplier |
-| HUD Horizontal Offset | -0.65 | Upper-left edge horizontal position in head space |
-| HUD Vertical Offset | 0.48 | Upper-left edge vertical position in head space |
+| HUD Horizontal Offset | -0.5 | Upper-left edge horizontal position in head space |
+| HUD Vertical Offset | 0.4 | Upper-left edge vertical position in head space |
 
 Use this plugin's eye-height offset instead of UnityVRMod's eye-height/scene-pose
 offsets during gameplay: the companion controls the rig's position. UnityVRMod's
@@ -217,7 +218,13 @@ desktop group. **Soap coverage** is the dragon's soap coverage; **Sponge supply*
 is the equipped sponge's remaining fill, not that same percentage. Optional
 objective and dialogue-readiness bars appear when their desktop bars appear.
 The HUD occupies a single stereo surface at 1.2 tracking-space meters and follows
-head position and rotation to stay in the upper-left of the view. Adjust its size
+head position and rotation to stay in the upper-left of the view. Version 0.3.2
+moves it 15 cm right and 8 cm down in tracking space. Left Y toggles visibility
+once per press, including during dialogue; release Y after VR/focus resumes before
+pressing it. OpenXR uses Touch Y (Index left B is the equivalent); OpenVR reads
+the left secondary face button, as defined by
+[xrizer's Touch mapping](https://github.com/Supreeeme/xrizer/blob/main/src/input/profiles/oculus_touch.rs).
+Vive/motion OpenXR profiles have no Y binding. Adjust its size
 or offsets under `[UI]` in the config if needed.
 
 This does not convert the remaining desktop menus or inventory into VR. Existing desktop mouse and keyboard controls remain available.

@@ -11,7 +11,7 @@ using UnityEngine.InputSystem.LowLevel;
 
 namespace WalkNWash.VRCompanion
 {
-    [BepInPlugin(Id, "Walk N Wash VR Companion", "0.3.1")]
+    [BepInPlugin(Id, "Walk N Wash VR Companion", "0.3.2")]
     [BepInDependency("com.newunitymodder.unityvrmod", BepInDependency.DependencyFlags.HardDependency)]
     [DefaultExecutionOrder(30000)]
     public sealed class Plugin : BaseUnityPlugin
@@ -30,6 +30,8 @@ namespace WalkNWash.VRCompanion
         private readonly VrDialogue dialogue = new VrDialogue();
         private readonly VrHud hud = new VrHud();
         private bool hudFailed;
+        private HudToggle hudToggle;
+        private bool hudToggleFailed;
         private ConfigEntry<bool> showHud;
         private ConfigEntry<float> hudScale, hudHorizontal, hudVertical;
         private bool dialogueFailed;
@@ -70,8 +72,8 @@ namespace WalkNWash.VRCompanion
             pointerPitch = Config.Bind("UI", "Pointer Pitch Offset", 0f, new ConfigDescription("Controller ray pitch adjustment in degrees; useful for OpenVR controller pose conventions.", new AcceptableValueRange<float>(-60f, 60f)));
             showHud = Config.Bind("UI", "Show Progress HUD", true, "Show game progress bars and equipped sponge supply at the upper-left of the headset view.");
             hudScale = Config.Bind("UI", "HUD Scale", 1f, new ConfigDescription("Progress HUD size multiplier.", new AcceptableValueRange<float>(.5f, 1.5f)));
-            hudHorizontal = Config.Bind("UI", "HUD Horizontal Offset", -.65f, new ConfigDescription("Upper-left HUD edge horizontally in head space, at 1.2 meters depth.", new AcceptableValueRange<float>(-1f, 0f)));
-            hudVertical = Config.Bind("UI", "HUD Vertical Offset", .48f, new ConfigDescription("Upper-left HUD edge vertically in head space, at 1.2 meters depth.", new AcceptableValueRange<float>(0f, .8f)));
+            hudHorizontal = Config.Bind("UI", "HUD Horizontal Offset", -.5f, new ConfigDescription("Upper-left HUD edge horizontally in head space, at 1.2 meters depth.", new AcceptableValueRange<float>(-1f, 0f)));
+            hudVertical = Config.Bind("UI", "HUD Vertical Offset", .4f, new ConfigDescription("Upper-left HUD edge vertically in head space, at 1.2 meters depth.", new AcceptableValueRange<float>(0f, .8f)));
             try
             {
                 harmony = new Harmony(Id);
@@ -176,6 +178,25 @@ namespace WalkNWash.VRCompanion
         }
         private void Update()
         {
+            if (!hudToggleFailed)
+            {
+                try
+                {
+                    bool usable = Enabled && controllers.Value && VrActive && backend.Focused;
+                    if (usable) backend.Poll();
+                    if (hudToggle.Update(usable && backend.ToggleHud, usable))
+                    {
+                        showHud.Value = !showHud.Value;
+                        hud.Reset();
+                        Logger.LogInfo("Progress HUD " + (showHud.Value ? "shown" : "hidden") + " (left Y).");
+                    }
+                }
+                catch (Exception e)
+                {
+                    hudToggleFailed = true;
+                    Logger.LogError("HUD toggle unavailable; other controls remain active. " + e);
+                }
+            }
             if (dialogueFailed) return;
             try
             {
@@ -388,6 +409,7 @@ namespace WalkNWash.VRCompanion
                 current.prompt.Hide();
                 current.dialogue.Reset();
                 current.hud.Reset();
+                current.hudToggle = new HudToggle();
                 current.ReleaseButtons();
                 current.backend = null;
                 current.calibrated = false;
