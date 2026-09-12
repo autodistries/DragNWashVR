@@ -43,8 +43,8 @@ Controller-driven hands design and audit: [design and findings](docs/CONTROLLER_
   washing effects remain. Move controllers to rub; head rotation does not aim them.
 - Aim the **left controller** at objects to select the interaction prompt.
   Dialogue keeps its existing **right-controller** pointer.
-- Grip/trigger values curl idle fingers. An optional mirrored right hand appears
-  when no tool is equipped; it is visual only. Contact haptics are enabled.
+- Grip/trigger values curl idle left-hand fingers inward. The right controller
+  shows only its equipped object. Contact haptics are enabled.
 - Hold the **right trigger** and bring the sponge to a refill target to dunk it.
   The existing left-trigger refill interaction also remains available.
 - A world-space **Left trigger / Interact** hint appears above the game's selected
@@ -207,20 +207,21 @@ legacy input emulation must expose that button. No alternative jump button is
 assigned to controllers without A. Like triggers, A must be released after resuming
 VR/focus or re-enabling the jump action before another press is accepted.
 
-## Controller hands (v0.5.0)
+## Controller hands (v0.5.1)
 
 The left hand and sponge use independent controller targets, with a close-contact
 probe followed by assisted forward reach. Reach is limited both from the controller
 and from the character eyes. The original hand/sponge contact tail still handles
 surface effects, rubbing events, fluid emission and sponge consumption. The wrist
 can twist around the contact normal without tilting the palm through the surface.
-Inactive hands have no contact target; their ordinary and jiggle-physics colliders
-are disabled. Lost tracking releases that controller's trigger action and requires
-physical trigger release before reactivation.
+Inactive hands have no gameplay contact target; originally enabled ordinary and
+jiggle-physics colliders remain enabled for passive contact, as in the game.
+Tracking loss disables those colliders and releases that controller's trigger
+action; physical trigger release is required before reactivation.
 
 Equipped non-sponge tools follow the right controller at their model root, including
-the sprayer nozzle. Per-tool grip alignment, close-contact comfort, mirrored hand
-appearance and haptic strength need headset testing. Native controller poses are
+the sprayer nozzle. Per-tool grip alignment, close-contact comfort, left-hand
+alignment and haptic strength need headset testing. Native controller poses are
 sampled from the existing mod session; simulation uses cached poses, so a small
 pose/render latency remains possible. Full joint tracking is not part of this
 build: idle finger poses are inferred from controller inputs.
@@ -234,15 +235,21 @@ Settings in the `[Hands]` section:
 | Contact Probe Radius | 0.045 | Close-contact swept probe radius |
 | Contact Haptics | true | Short pulses on contact and movement while rubbing |
 | Idle Finger Curl | true | Infer idle finger pose from grip/index trigger |
-| Finger Curl Degrees | 65 | Per-joint curl; negative values reverse direction |
-| Show Empty Right Hand | true | Visual-only mirrored hand when no tool is equipped |
+| Finger Curl Degrees | -65 | Per-joint inward curl for the installed hand |
+| Left Hand Rotation Offset | (0, 90, 90) | Local Euler mesh correction; controller aim and right tools stay unchanged |
 | Direct Sponge Dunk | true | Refill a used sponge near a valid refill target while right trigger is held |
 
-The mirrored hand copies only transforms and skinned renderers from the installed
-left-hand model. It has no gameplay scripts, collider, animator, or duplicated
-interaction callbacks. Its grip controls cannot activate objects by themselves.
+v0.5.1 removes the generated empty right hand and reverses the idle curl direction.
+The left-hand mesh correction maps the reported fingers-right/palm-forward pose
+to fingers-forward/palm-down. Surface contact still controls palm tilt and native
+animation still owns the active fingers. This correction needs headset confirmation;
+the offset setting allows further tuning without changing interaction rays.
 
-Validation: 243 offline checks, native haptic ABI checks, and 101 Unity runtime
+Upgrading from v0.5.0: change an existing `Finger Curl Degrees = 65` to `-65`;
+BepInEx preserves saved values when a default changes. The obsolete
+`Show Empty Right Hand` setting is ignored. This installation has been updated.
+
+Validation: 243 offline checks, native haptic ABI checks, and 110 Unity runtime
 checks passed. Runtime checks use simulated controller samples with actual game
 hand/sponge methods. They verify event positions/normals, supply consumption,
 fluid-emission calls, release, independent tracking loss, object eligibility and

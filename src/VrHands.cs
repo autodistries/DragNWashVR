@@ -18,11 +18,10 @@ namespace WalkNWash.VRCompanion
         private readonly Harmony patches = new Harmony(Plugin.Id + ".hands");
         private readonly Dictionary<MonoBehaviour, ContactState> states = new Dictionary<MonoBehaviour, ContactState>();
         private readonly Dictionary<Transform, SavedTransform> toolRoots = new Dictionary<Transform, SavedTransform>();
-        private readonly ConfigEntry<bool> enabled, haptics, fingers, rightHand, dunk;
+        private readonly ConfigEntry<bool> enabled, haptics, fingers, dunk;
         private readonly ConfigEntry<float> reach, probeRadius, curlDegrees;
+        private readonly ConfigEntry<Vector3> leftRotationOffset;
         private bool failed;
-        private HandVisual rightVisual;
-        private Transform rightSource;
         private static readonly Dictionary<string, FieldInfo> fields = new Dictionary<string, FieldInfo>();
 
         internal VrHands(Plugin host, ConfigFile config)
@@ -33,8 +32,8 @@ namespace WalkNWash.VRCompanion
             probeRadius = config.Bind("Hands", "Contact Probe Radius", .045f, new ConfigDescription("Close-contact probe radius for hand/sponge rubbing.", new AcceptableValueRange<float>(0f, .1f)));
             haptics = config.Bind("Hands", "Contact Haptics", true, "Brief feedback on contact and while rubbing.");
             fingers = config.Bind("Hands", "Idle Finger Curl", true, "Infer idle finger curl from grip and index trigger. Native animation owns active contact.");
-            curlDegrees = config.Bind("Hands", "Finger Curl Degrees", 65f, new ConfigDescription("Idle curl angle per finger joint; negative reverses bending direction.", new AcceptableValueRange<float>(-90f, 90f)));
-            rightHand = config.Bind("Hands", "Show Empty Right Hand", true, "Show a visual-only mirrored hand when no tool is equipped.");
+            curlDegrees = config.Bind("Hands", "Finger Curl Degrees", -65f, new ConfigDescription("Idle curl angle per finger joint; negative bends the installed hand inward.", new AcceptableValueRange<float>(-90f, 90f)));
+            leftRotationOffset = config.Bind("Hands", "Left Hand Rotation Offset", new Vector3(0, 90, 90), "Local Euler correction for the left-hand mesh. Does not change controller aim or held tools; contact still aligns the palm to the surface.");
             dunk = config.Bind("Hands", "Direct Sponge Dunk", true, "Hold right trigger and place the sponge near a refill target to use its original refill action.");
             try
             {
@@ -71,7 +70,6 @@ namespace WalkNWash.VRCompanion
                 }
                 if (!host.TryHandFrame(2, out _))
                 {
-                    rightVisual?.Place(default, false);
                     foreach (var root in toolRoots.Values) root.Show(false);
                 }
             }
@@ -125,9 +123,13 @@ namespace WalkNWash.VRCompanion
             internal int LastFrame = -1, Hand;
             internal void Show(bool visible)
             { for (int i = 0; i < Renderers.Length; i++) if (Renderers[i]) Renderers[i].enabled = visible && RendererEnabled[i]; }
-            internal void ContactPhysics(bool active)
+            internal void QueryColliders(bool active)
             {
                 for (int i = 0; i < Colliders.Length; i++) if (Colliders[i]) Colliders[i].enabled = active && ColliderEnabled[i];
+            }
+            internal void ContactPhysics(bool active)
+            {
+                QueryColliders(active);
                 for (int i = 0; i < Jiggle.Length; i++) if (Jiggle[i]) Jiggle[i].enabled = active && JiggleEnabled[i];
             }
             internal void Restore() { Original.Restore(Visual); Show(true); ContactPhysics(true); Fingers?.Restore(); }
@@ -169,17 +171,19 @@ namespace WalkNWash.VRCompanion
             if (active && !state.Using) state.Fingers?.Restore();
             if (!active || !state.Using) Set(model, "splatted", false);
             state.Using = active;
-            state.ContactPhysics(false);
+            state.QueryColliders(false); // Exclude our own physics shapes without unregistering passive jiggle contact.
             state.Blend = Mathf.MoveTowards(state.Blend, active ? 1 : 0, Time.deltaTime * (active ? 20 : 8));
             state.Hit = active ? HandContact.Find(state.Frame, host.HandBodyEye, state.Previous, state.PreviousValid,
                 reach.Value, probeRadius.Value) : new HandHit { Point = state.Frame.Position, Normal = -(state.Frame.Rotation * Vector3.forward) };
-            state.ContactPhysics(active);
+            // Vanilla keeps passive hand/jiggle contact enabled even at rest.
+            // Tracking loss still disables it, and idle gameplay targets stay cleared.
+            state.ContactPhysics(state.Valid);
             state.Previous = state.Frame.Position; state.PreviousValid = state.Valid && active;
             Set(model, "lookOffset", Vector2.zero);
             Set(model, "usingT", state.Blend);
             Set(model, "hitCollider", active ? state.Hit.Collider : null);
             Set(model, "raycastTarget", state.Visual.parent.InverseTransformPoint(state.Hit.Point));
-            Quaternion rotation = state.Hit.Collider ? HandContact.SurfaceRotation(state.Hit.Normal, state.Frame.Rotation) : state.Frame.Rotation;
+            Quaternion rotation = VisualRotation(state);
             Set(model, "raycastTargetRotation", Quaternion.Inverse(state.Visual.parent.rotation) * rotation);
             state.Show(state.Valid);
             string method = model is PlapperHand ? "UpdatePlapper" : "UpdateSponge";
@@ -198,12 +202,20 @@ namespace WalkNWash.VRCompanion
                 state.LastFeedback = state.Hit.Point; state.NextFeedback = Time.unscaledTime + .08f;
             }
         }
+        private Quaternion VisualRotation(ContactState state)
+        {
+            // plapper_L fingers run along local +Y; its contact palm faces +Z.
+            // Correct the mesh basis without rotating the controller's targeting ray.
+            Quaternion wrist = state.Frame.Rotation;
+            if (state.Hand == 1) wrist *= Quaternion.Euler(leftRotationOffset.Value);
+            return state.Hit.Collider ? HandContact.SurfaceRotation(state.Hit.Normal, wrist) : wrist;
+        }
         // Injected before the original visual transform block. The native contact/effect tail remains.
         private static bool PlaceVisual(MonoBehaviour model)
         {
             if (current == null || !current.Active || !current.states.TryGetValue(model, out var s)) return false;
             if (!s.Valid) return true;
-            var rotation = s.Hit.Collider ? HandContact.SurfaceRotation(s.Hit.Normal, s.Frame.Rotation) : s.Frame.Rotation;
+            var rotation = current.VisualRotation(s);
             Vector3 position = Vector3.Lerp(s.Frame.Position, s.Hit.Point, s.Blend);
             var curve = (AnimationCurve)Backend.Field(model, model is PlapperHand ? "plapNormalOffset" : "spongeNormalOffset");
             if (s.Using && curve != null) position += rotation * Vector3.back * curve.Evaluate(s.Blend) * .2f;
@@ -326,7 +338,6 @@ namespace WalkNWash.VRCompanion
                 bool left = (bool)Backend.Field(__instance, "_plapperDown") && current.host.TryHandFrame(1, out _);
                 bool right = (bool)Backend.Field(manager, "_useButtonDown") && current.host.TryHandFrame(2, out _);
                 current.host.HandInteraction(left || right);
-                current.UpdateRightHand();
             }
             catch (Exception e) { current.Fail(e); }
         }
@@ -345,20 +356,6 @@ namespace WalkNWash.VRCompanion
             }
             catch (Exception e) { Fail(e); }
         }
-        private void UpdateRightHand()
-        {
-            if (!rightHand.Value) { rightVisual?.Place(default, false); return; }
-            var left = states.Values.FirstOrDefault(s => s.Hand == 1 && s.Visual);
-            if (left == null) return;
-            if (rightSource != left.Visual)
-            {
-                rightVisual?.Dispose(); rightVisual = HandVisual.Mirror(left.Visual, left.Fingers); rightSource = left.Visual;
-            }
-            bool empty = ToolManager.GetCurrentTool() == ToolManager.GetEmptyTool();
-            bool valid = host.TryHandFrame(2, out var frame);
-            rightVisual.Place(frame, empty && valid);
-            if (fingers.Value) rightVisual.Pose(frame.Curl, frame.Trigger, false, curlDegrees.Value);
-        }
         private void Restore(MonoBehaviour model)
         {
             if (!states.TryGetValue(model, out var s)) return;
@@ -369,7 +366,7 @@ namespace WalkNWash.VRCompanion
         {
             foreach (var model in states.Keys.ToArray()) Restore(model);
             foreach (var root in toolRoots) root.Value.Restore(root.Key);
-            toolRoots.Clear(); rightVisual?.Dispose(); rightVisual = null; rightSource = null;
+            toolRoots.Clear();
         }
         private void Fail(Exception e)
         {

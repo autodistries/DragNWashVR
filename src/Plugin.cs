@@ -11,7 +11,7 @@ using UnityEngine.InputSystem.LowLevel;
 
 namespace WalkNWash.VRCompanion
 {
-    [BepInPlugin(Id, "Walk N Wash VR Companion", "0.5.0")]
+    [BepInPlugin(Id, "Walk N Wash VR Companion", "0.5.1")]
     [BepInDependency("com.newunitymodder.unityvrmod", BepInDependency.DependencyFlags.HardDependency)]
     [DefaultExecutionOrder(30000)]
     public sealed class Plugin : BaseUnityPlugin

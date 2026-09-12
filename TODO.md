@@ -3,32 +3,38 @@
 Keep one implementation task active. Commit completed changes separately.
 An implemented feature is not hardware-verified until the user tests it.
 
-## Current focus: validate v0.5.0 controller hands
+## Current focus: validate v0.5.1 hand corrections
 
 Implemented: both controller poses; left hand/sponge contact and matching object
 selection; idle tracking; surface-compatible wrist twist; close-contact probes;
-contact haptics; idle finger curl; visual-only mirrored empty right hand; equipped
-tool/nozzle tracking; direct sponge dunking. Original contact animations/effects
-remain. Idle ordinary/jiggle colliders are suppressed. Lost tracking clears that
-hand's action/contact; both hands retain independent state.
+contact haptics; idle finger curl; equipped tool/nozzle tracking; direct sponge dunking. Original contact animations/effects
+remain. Original passive ordinary/jiggle contact stays enabled while tracked,
+including idle. Lost tracking clears that hand's action/contact; both hands retain independent state.
 
 Asset audit: the first-person `plapper_L` has four finger chains and a separate
-jiggle collider. The mirrored right hand copies renderers/bones only. See
+jiggle collider, enabled in all original serialized hand instances. See
 [design and audit](docs/CONTROLLER_HANDS.md). Optical finger tracking is optional
 future work; current curl is inferred from controller inputs.
 
-Validation: 243 offline checks, C haptic ABI checks, and 101 checks inside Unity
+Validation: 243 offline checks, C haptic ABI checks, and 110 checks inside Unity
 passed. Tests exercise actual hand/sponge contact callbacks, target coordinates,
 supply consumption, native fluid-emission calls, inactive/release behavior, object
 selection eligibility, independent tracking loss and the existing controls.
-Headset tests below remain unconfirmed.
+User confirmed v0.5.0 hand position tracking and trigger-driven finger movement.
+Reported faults: reversed curl, unwanted empty right hand, and palm/finger axes
+misaligned. v0.5.1 reverses curl, removes the empty right mesh, and adds a left-only
+mesh rotation correction. Passive contact is restored; idle gameplay targets still
+clear to prevent stale rub/wash effects. Remaining headset checks follow.
 
 ## Hand headset checks, in order
 
-- [ ] Idle hand/tool follows its controller. Grip/index curls idle fingers without
-  activating interactions. Mirrored empty right hand looks correct.
+- [x] User confirmed hand positions follow controllers and trigger moves fingers.
+- [ ] Hold left hand fingers-forward/palm-down: virtual hand matches. Curl bends
+  inward; active surface animation still works. Tune left mesh offset if needed.
+- [ ] Empty right controller shows nothing; equipping a tool shows only that object.
+- [ ] Idle left hand retains original passive jiggle contact. Tracking loss disables it.
 - [ ] Hold left trigger: aim and rub with controller while looking elsewhere.
-  Surface wrapping/slap animation remains; no contact while idle/released.
+  Surface wrapping/slap animation remains; no stale rub/wash effects on release.
 - [ ] Hold right trigger with sponge: scrub using controller motion. Visible
   contact matches washing; supply drops. Wrist twist stays aligned with surface.
 - [ ] Left controller selects prompts/objects; buttons activate once. Right

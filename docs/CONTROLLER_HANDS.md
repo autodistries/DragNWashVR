@@ -1,10 +1,10 @@
 # Controller-driven hands: feasibility and design
 
 Study date: 2026-09-12. Companion baseline: v0.4.1 (`38d49c9`).
-Status: implemented in v0.5.0; headset validation pending. The original study
-below records the rationale. Implementation uses shared controller frames,
+Status: implemented in v0.5.0; corrected after headset feedback in v0.5.1.
+The original study below records the rationale. Implementation uses shared controller frames,
 controller-driven contact, preserved native effect tails, tracked idle poses,
-contact haptics, controller-derived curl, mirrored empty right hand, tool/nozzle
+contact haptics, controller-derived curl, tool/nozzle
 tracking, and direct sponge dunking. Optical finger tracking remains optional.
 
 ## Asset audit and validation update
@@ -13,16 +13,28 @@ Read-only inspection of the installed serialized assets found `PlapperHand` in
 level1/3/4/5/6. Its `hand` reference resolves to `Hand/plapper_L`; skinned mesh
 `hamd` uses hand, index, middle, pinky and thumb bones (16 bone references).
 The visual subtree also contains `SlapCollider` with `JiggleColliderExample`,
-which registers/unregisters its collider in OnEnable/OnDisable. Idle VR hand code
-therefore disables this component along with ordinary colliders. No game assets
-were modified or copied into the repository.
+which registers/unregisters its collider in OnEnable/OnDisable. Serialized
+`m_Enabled` is 1 in each of level1/3/4/5/6. Vanilla does not disable it on release.
+v0.5.1 therefore preserves this passive idle contact; tracking loss disables it.
+Vanilla `UpdateNotInUse` also retains its old raycast target, so the retracting
+hand can briefly keep rubbing a previous surface. VR clears that cached target
+on release to avoid carrying stale gameplay effects along with the tracked hand.
+No game assets were modified or copied into the repository.
 
 The sponge visual has a central bone and four corner bones, which remain under
 the original deformation/animation system. Active finger pose is also left to
-the original animator. The right-hand visual copies transforms and skinned
-renderers only and starts from the left hand's idle bone baseline.
+the original animator. The generated empty right-hand visual was removed after
+user feedback: only equipped objects should appear on the right.
 
-101 Unity checks cover actual contact callbacks and fluid-emission calls (the GPU
+The user confirmed position tracking but reported outward curl and, with their
+hand fingers-forward/palm-down, virtual fingers-right/palm-forward. v0.5.1 uses
+-65 degrees of local-X curl and a local Euler mesh offset (0, 90, 90), only for
+the left hand. The hand's authored finger axis is approximately +Y and the palm
+contact axis is +Z. Regression tests reproduce the reported basis and check the
+corrected forward/down directions, unchanged aim/tool axes, and surface normals.
+The hardware correction is inferred from that report and still needs retesting.
+
+110 Unity checks cover actual contact callbacks and fluid-emission calls (the GPU
 fluid simulation is replaced only at its boundary in the standalone test), plus
 sponge resource use, release/tracking-loss handling, controller-directed object
 selection and prior controls. Hardware pose conventions, haptics and visuals
@@ -36,7 +48,7 @@ and washing pipeline; change how its target is chosen and represented.
 
 | State | Position | Orientation | Gameplay effects |
 | --- | --- | --- | --- |
-| Inactive | Left hand / equipped right tool follows its controller | Calibrated grip pose, with per-model offset | None |
+| Inactive | Left hand / equipped right tool follows its controller | Calibrated grip pose, with per-model offset | Original passive contact; no new click/rub/wash target |
 | Trigger held, no contact | Animate forward from controller toward a bounded target | Controller-directed palm/tool aim | None until contact qualifies |
 | Trigger held, touching | Contact target follows controller motion along surface | Surface normal controls contact tilt; preserve wrist twist where compatible | Original slap/rub/wash logic |
 | Release / tracking loss / dialogue / pause | Release contact, return to tracked idle or hide unavailable hand | No stale tracking used | Stop effects; require trigger release before reactivation |

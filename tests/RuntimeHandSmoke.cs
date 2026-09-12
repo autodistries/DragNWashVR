@@ -18,9 +18,10 @@ namespace WalkNWash.VRCompanion
         private sealed class Input : IControllerInput
         {
             internal Vector3 Left = new Vector3(-.25f, 1.8f, 0), Right = new Vector3(.25f, 1.8f, 0);
+            internal Quaternion LeftRotation = Quaternion.identity;
             internal bool LeftValid = true, RightValid = true;
             public bool Hand(int hand, bool aim, ulong space, long time, Array poses, out Vector3 position, out Quaternion rotation)
-            { position = hand == 1 ? Left : Right; rotation = Quaternion.identity; return hand == 1 ? LeftValid : RightValid; }
+            { position = hand == 1 ? Left : Right; rotation = hand == 1 && !aim ? LeftRotation : Quaternion.identity; return hand == 1 ? LeftValid : RightValid; }
             public float Squeeze(int hand) => .6f;
             public void Pulse(int hand, float strength) { }
             public void Poll(out Vector2 move, out Vector2 turn, out float left, out float right, out bool jump, out bool hud, out bool crouch)
@@ -99,6 +100,8 @@ namespace WalkNWash.VRCompanion
                 parent.localPosition = new Vector3(.6f, -.2f, .1f); parent.localRotation = Quaternion.Euler(0, 25, 0);
                 var visual = new GameObject("plapper_L").transform; visual.SetParent(parent, false);
                 var idleCollider = visual.gameObject.AddComponent<BoxCollider>();
+                var disabledCollider = visual.gameObject.AddComponent<SphereCollider>(); disabledCollider.enabled = false;
+                var jiggle = (MonoBehaviour)visual.gameObject.AddComponent(AccessTools.TypeByName("GatorDragonGames.JigglePhysics.JiggleColliderExample"));
                 var finger = new GameObject("index_01").transform; finger.SetParent(visual, false);
                 Set(model, "hand", visual); Set(model, "plapNormalOffset", AnimationCurve.Constant(0, 1, 0));
                 Set(model, "spongeAudioSource", root.AddComponent<AudioSource>()); Set(model, "hitColliders", new Collider[32]);
@@ -118,9 +121,23 @@ namespace WalkNWash.VRCompanion
                     if (active) model.UseContinuous(); else model.UpdateNotInUse();
                 };
                 tick(false);
-                check(!idleCollider.enabled, "idle hand disables physical contact collider");
+                check(idleCollider.enabled, "idle hand preserves authored passive contact collider");
+                check(jiggle.enabled, "idle hand preserves the actual game jiggle component");
+                check(!disabledCollider.enabled, "idle tracking cannot enable an originally disabled collider");
                 Near(check, visual.position, left.Position, "native idle hook places hand at controller");
                 check(rubs == 0 && slaps == 0, "idle hand touching view ray cannot produce contact effects");
+                // Reproduce the reported grip: old mesh fingers (+Y) point right,
+                // old palm (+Z) points forward. The corrected mesh must point forward/down.
+                input.LeftRotation = Quaternion.Euler(0, 0, -90);
+                tick(false);
+                Near(check, visual.up, Vector3.forward, "reported sideways fingers now point forward");
+                Near(check, visual.forward, Vector3.down, "reported forward palm now faces down");
+                plugin.TryHandFrame(1, out var correctedFrame);
+                Near(check, correctedFrame.Direction, Vector3.forward, "left mesh alignment cannot rotate controller aim");
+                input.LeftRotation = Quaternion.Euler(0, 40, 0) * input.LeftRotation;
+                tick(false);
+                Near(check, visual.up, Quaternion.Euler(0, 40, 0) * Vector3.forward, "corrected hand still follows wrist rotation");
+                input.LeftRotation = Quaternion.identity;
                 Set(state, "Blend", 1f); Set(state, "Using", true); Set(model, "splatted", true);
                 tick(true);
                 check(idleCollider.enabled, "active hand restores authored contact collider");
@@ -134,25 +151,21 @@ namespace WalkNWash.VRCompanion
                 check(rubs == 1 && Backend.Field(model, "hitCollider") == null, "release clears stale target before idle effect code");
                 input.LeftValid = false; tick(true);
                 check(rubs == 1 && Backend.Field(model, "hitCollider") == null, "tracking loss cannot keep rubbing");
+                check(!idleCollider.enabled, "lost tracking disables passive contact too");
+                check(!jiggle.enabled, "lost tracking disables actual jiggle contact");
                 input.LeftValid = true;
-                using (var mirror = HandVisual.Mirror(visual))
-                {
-                    var clone = (Transform)Backend.Field(mirror, "root");
-                    check(clone.GetComponentsInChildren<Collider>(true).Length == 0 && clone.GetComponentsInChildren<MonoBehaviour>(true).Length == 0,
-                        "mirrored hand cannot clone gameplay scripts or colliders");
-                    mirror.Place(right, true); Near(check, clone.position, right.Position, "right idle hand follows right controller");
-                }
                 using (var fingers = new HandVisual(visual))
                 {
                     Quaternion rest = finger.localRotation;
-                    fingers.Pose(0, .5f, false, 60);
+                    fingers.Pose(0, .5f, false, -60);
                     check(Quaternion.Angle(rest, finger.localRotation) > 29, "idle index finger curls from trigger");
-                    using (var mirror = HandVisual.Mirror(visual, fingers))
-                    {
-                        var cloneRoot = (Transform)Backend.Field(mirror, "root");
-                        var cloneFinger = Array.Find(cloneRoot.GetComponentsInChildren<Transform>(true), t => t.name == "index_01");
-                        check(Quaternion.Angle(cloneFinger.localRotation, rest) < .01f, "right hand does not inherit left controller curl");
-                    }
+                    check((Quaternion.Inverse(rest) * finger.localRotation * Vector3.up).z < -.49f,
+                        "idle index finger bends inward rather than backward");
+                    check((float)((ConfigEntry<float>)Backend.Field(hands, "curlDegrees")).DefaultValue < 0,
+                        "installed hand default uses inward finger curl");
+                    Quaternion curled = finger.localRotation;
+                    fingers.Pose(1, 1, true, -60);
+                    check(Quaternion.Angle(curled, finger.localRotation) < .01f, "idle curl cannot overwrite active animation");
                     fingers.Restore(); Near(check, finger.localRotation * Vector3.up, rest * Vector3.up, "finger pose restores before native animation");
                 }
                 SpongeChecks(plugin, hands, root, material, right, check);
@@ -239,6 +252,7 @@ namespace WalkNWash.VRCompanion
                     if (active) sponge.UseContinuous(); else sponge.UpdateNotInUse();
                 };
                 tick(false); Near(check, visual.position, right.Position, "equipped idle sponge follows right controller");
+                Near(check, visual.forward, right.Rotation * Vector3.forward, "left hand correction cannot rotate the right tool");
                 check(rubs == 0 && fluidEmissions == 0, "idle sponge emits neither rub nor fluid");
                 Set(state, "Using", true); Set(state, "Blend", 1f); Set(sponge, "splatted", true);
                 tick(true);
