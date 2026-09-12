@@ -11,7 +11,7 @@ using UnityEngine.InputSystem.LowLevel;
 
 namespace WalkNWash.VRCompanion
 {
-    [BepInPlugin(Id, "Walk N Wash VR Companion", "0.4.1")]
+    [BepInPlugin(Id, "Walk N Wash VR Companion", "0.5.0")]
     [BepInDependency("com.newunitymodder.unityvrmod", BepInDependency.DependencyFlags.HardDependency)]
     [DefaultExecutionOrder(30000)]
     public sealed class Plugin : BaseUnityPlugin
@@ -180,12 +180,13 @@ namespace WalkNWash.VRCompanion
         internal bool TryHandFrame(int hand, out HandFrame frame)
         {
             frame = default;
-            if (!ControllerContext || !controllers.Value || !backend.Hand(hand, false, out var position, out var rotation)) return false;
+            if (!ControllerContext || !controllers.Value || !backend.HeadPose(out var head, out _)
+                || !backend.Hand(hand, false, out var position, out var rotation)) return false;
             backend.Poll();
             Quaternion yaw = Quaternion.Euler(0, rigYaw, 0);
             float scale = backend.Rig.transform.localScale.x;
             Vector3 anchor = HandBodyEye + Vector3.up * eyeOffset.Value;
-            if (!crouchFailed && crouch != null && physicalCrouch.Value && backend.HeadPose(out var head, out _))
+            if (!crouchFailed && crouch != null && physicalCrouch.Value)
                 anchor.y += crouch.EyeAdjustment(head.y, scale);
             frame.Position = anchor + yaw * ((position - baseline) * scale);
             frame.Rotation = yaw * rotation;
@@ -212,6 +213,7 @@ namespace WalkNWash.VRCompanion
         }
         private void Update()
         {
+            hands?.Maintain();
             if (!hudToggleFailed)
             {
                 try

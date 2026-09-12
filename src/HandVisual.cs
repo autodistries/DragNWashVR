@@ -30,7 +30,7 @@ namespace WalkNWash.VRCompanion
         }
         internal void Restore()
         { for (int i = 0; i < bones.Count; i++) if (bones[i]) bones[i].localRotation = rest[i]; }
-        internal static HandVisual Mirror(Transform source)
+        internal static HandVisual Mirror(Transform source, HandVisual idleTemplate = null)
         {
             var map = new Dictionary<Transform, Transform>();
             var container = new GameObject("VR right hand (visual only)");
@@ -46,12 +46,16 @@ namespace WalkNWash.VRCompanion
             var clone = Copy(source, container.transform);
             clone.localPosition = Vector3.zero; clone.localRotation = Quaternion.identity;
             clone.localScale = new Vector3(-source.localScale.x, source.localScale.y, source.localScale.z);
+            if (idleTemplate != null)
+                for (int i = 0; i < idleTemplate.bones.Count; i++)
+                    if (map.TryGetValue(idleTemplate.bones[i], out var idleBone)) idleBone.localRotation = idleTemplate.rest[i];
             foreach (var renderer in source.GetComponentsInChildren<SkinnedMeshRenderer>(true))
             {
                 var copy = map[renderer.transform].gameObject.AddComponent<SkinnedMeshRenderer>();
                 copy.sharedMesh = renderer.sharedMesh; copy.sharedMaterials = renderer.sharedMaterials;
                 var mappedBones = new Transform[renderer.bones.Length];
-                for (int i = 0; i < mappedBones.Length; i++) map.TryGetValue(renderer.bones[i], out mappedBones[i]);
+                for (int i = 0; i < mappedBones.Length; i++)
+                    if (renderer.bones[i]) map.TryGetValue(renderer.bones[i], out mappedBones[i]);
                 copy.bones = mappedBones;
                 if (renderer.rootBone && map.TryGetValue(renderer.rootBone, out var bone)) copy.rootBone = bone;
                 copy.localBounds = renderer.localBounds; copy.updateWhenOffscreen = true;

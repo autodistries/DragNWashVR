@@ -4,11 +4,17 @@ using System.Collections.Generic;
 using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
+using com.gatordragongames.washnwalk.tools;
 
 namespace WalkNWash.VRCompanion
 {
     internal static class RuntimeHandSmoke
     {
+        public sealed class EligibleObject : Interactable
+        {
+            internal bool Eligible = true;
+            protected override bool CanInteract(Tool tool) => Eligible;
+        }
         private sealed class Input : IControllerInput
         {
             internal Vector3 Left = new Vector3(-.25f, 1.8f, 0), Right = new Vector3(.25f, 1.8f, 0);
@@ -23,6 +29,13 @@ namespace WalkNWash.VRCompanion
         }
         private static void Set(object obj, string field, object value) => AccessTools.Field(obj.GetType(), field).SetValue(obj, value);
         private static void Near(Action<bool, string> check, Vector3 a, Vector3 b, string name) => check(Vector3.Distance(a, b) < .002f, name);
+        private static int fluidEmissions;
+        private static Vector3 fluidPoint;
+        private static bool FluidBoundary(object[] __args)
+        {
+            fluidEmissions++; fluidPoint = (Vector3)Backend.Field(__args[0], "position");
+            return false; // Record native emission without starting the GPU fluid simulation in this fixture.
+        }
 
         // Called inside the production-player fixture, after ordinary locomotion checks.
         internal static void Run(Plugin plugin, Backend backend, LookController look, Action<bool, string> check)
@@ -85,6 +98,7 @@ namespace WalkNWash.VRCompanion
                 var parent = new GameObject("Authored hand parent").transform; parent.SetParent(handObject.transform, false);
                 parent.localPosition = new Vector3(.6f, -.2f, .1f); parent.localRotation = Quaternion.Euler(0, 25, 0);
                 var visual = new GameObject("plapper_L").transform; visual.SetParent(parent, false);
+                var idleCollider = visual.gameObject.AddComponent<BoxCollider>();
                 var finger = new GameObject("index_01").transform; finger.SetParent(visual, false);
                 Set(model, "hand", visual); Set(model, "plapNormalOffset", AnimationCurve.Constant(0, 1, 0));
                 Set(model, "spongeAudioSource", root.AddComponent<AudioSource>()); Set(model, "hitColliders", new Collider[32]);
@@ -104,10 +118,12 @@ namespace WalkNWash.VRCompanion
                     if (active) model.UseContinuous(); else model.UpdateNotInUse();
                 };
                 tick(false);
+                check(!idleCollider.enabled, "idle hand disables physical contact collider");
                 Near(check, visual.position, left.Position, "native idle hook places hand at controller");
                 check(rubs == 0 && slaps == 0, "idle hand touching view ray cannot produce contact effects");
                 Set(state, "Blend", 1f); Set(state, "Using", true); Set(model, "splatted", true);
                 tick(true);
+                check(idleCollider.enabled, "active hand restores authored contact collider");
                 check(rubs == 1 && slaps == 0, "preserved native contact tail emits one rub callback");
                 Near(check, visual.position, hit.Point, "visible hand reaches controller-selected contact");
                 Near(check, rubPoint, visual.position, "native event position agrees with moved hand despite rotated parent");
@@ -131,8 +147,16 @@ namespace WalkNWash.VRCompanion
                     Quaternion rest = finger.localRotation;
                     fingers.Pose(0, .5f, false, 60);
                     check(Quaternion.Angle(rest, finger.localRotation) > 29, "idle index finger curls from trigger");
+                    using (var mirror = HandVisual.Mirror(visual, fingers))
+                    {
+                        var cloneRoot = (Transform)Backend.Field(mirror, "root");
+                        var cloneFinger = Array.Find(cloneRoot.GetComponentsInChildren<Transform>(true), t => t.name == "index_01");
+                        check(Quaternion.Angle(cloneFinger.localRotation, rest) < .01f, "right hand does not inherit left controller curl");
+                    }
                     fingers.Restore(); Near(check, finger.localRotation * Vector3.up, rest * Vector3.up, "finger pose restores before native animation");
                 }
+                SpongeChecks(plugin, hands, root, material, right, check);
+                SelectionChecks(plugin, root, left, check);
                 check(!(bool)Backend.Field(hands, "failed"), "hand integration survives real contact callbacks");
             }
             finally
@@ -143,6 +167,98 @@ namespace WalkNWash.VRCompanion
                 databaseField.SetValue(null, oldDatabase);
                 UnityEngine.Object.Destroy(databaseObject); UnityEngine.Object.Destroy(material);
                 UnityEngine.Object.Destroy(root);
+            }
+        }
+
+        private static void SelectionChecks(Plugin plugin, GameObject root, HandFrame left, Action<bool, string> check)
+        {
+            var listField = AccessTools.Field(typeof(Interactable), "_interactables");
+            var cachedField = AccessTools.Field(typeof(Interactable), "bestInteractable");
+            var originalList = listField.GetValue(null); var originalCached = cachedField.GetValue(null);
+            var near = new GameObject("Controller-selected object"); near.SetActive(false);
+            near.transform.SetParent(root.transform, true); near.transform.position = left.Position + Vector3.forward * .3f;
+            var side = new GameObject("Side object"); side.SetActive(false);
+            side.transform.SetParent(root.transform, true); side.transform.position = left.Position + Vector3.right;
+            try
+            {
+                listField.SetValue(null, new List<Interactable>());
+                var forwardObject = near.AddComponent<EligibleObject>();
+                var sideObject = side.AddComponent<EligibleObject>();
+                near.SetActive(true); side.SetActive(true);
+                check(Interactable.GetBestInteractable(null) == forwardObject, "controller direction selects eligible forward object");
+                check(Interactable.GetCachedInteractable() == forwardObject, "controller selection and game cached target agree");
+                forwardObject.Eligible = false;
+                check(Interactable.GetBestInteractable(null) == null, "game eligibility is preserved for controller selection");
+                forwardObject.Eligible = true;
+                near.transform.position = left.Position + Vector3.forward * 4;
+                check(Interactable.GetBestInteractable(null) == null, "controller selection preserves maximum interaction distance");
+            }
+            finally
+            {
+                near.SetActive(false); side.SetActive(false);
+                listField.SetValue(null, originalList); cachedField.SetValue(null, originalCached);
+                UnityEngine.Object.Destroy(near); UnityEngine.Object.Destroy(side);
+            }
+        }
+
+        private static void SpongeChecks(Plugin plugin, VrHands hands, GameObject root, PhysicsMaterialExtension material,
+            HandFrame right, Action<bool, string> check)
+        {
+            var managerField = AccessTools.Field(typeof(ToolManager), "_instance");
+            var oldManager = managerField.GetValue(null);
+            var eventField = AccessTools.Field(typeof(ToolModelSponge), "spongeRubbed");
+            var oldRub = eventField.GetValue(null);
+            var testPatch = new Harmony(Plugin.Id + ".hand-smoke-fluid");
+            var fluidType = AccessTools.TypeByName("FluidRenderingForGames.FluidParticleSystemSettings");
+            var fluid = ScriptableObject.CreateInstance(fluidType);
+            var tool = ScriptableObject.CreateInstance<Tool>();
+            var otherTool = ScriptableObject.CreateInstance<Tool>();
+            var gameObject = new GameObject("Smoke sponge"); gameObject.SetActive(false);
+            gameObject.transform.SetParent(root.transform, false);
+            try
+            {
+                testPatch.Patch(AccessTools.Method(fluidType, "OnFluidCollision"), prefix: new HarmonyMethod(typeof(RuntimeHandSmoke), nameof(FluidBoundary)));
+                var sponge = gameObject.AddComponent<ToolModelSponge>();
+                var visual = new GameObject("Sponge visual").transform; visual.SetParent(gameObject.transform, false);
+                Set(sponge, "sponge", visual); Set(sponge, "fluid", fluid);
+                Set(sponge, "spongeNormalOffset", AnimationCurve.Constant(0, 1, 0));
+                Set(sponge, "spongeAudioSource", gameObject.AddComponent<AudioSource>());
+                Set(sponge, "wetSpongeMat", material); Set(sponge, "drySpongeMat", material);
+                Set(sponge, "hitColliders", new Collider[32]); Set(sponge, "fillAmount", .8f);
+                Set(tool, "_model", sponge);
+                var manager = new ToolManager(); Set(manager, "_currentTool", tool); Set(manager, "_emptyTool", otherTool);
+                managerField.SetValue(null, manager);
+                int rubs = 0; Vector3 rubPoint = Vector3.zero;
+                ToolModelSponge.SpongeRubAction callback = (model, collider, point, normal) => { rubs++; rubPoint = point; };
+                eventField.SetValue(null, callback);
+                fluidEmissions = 0;
+                object state = AccessTools.Method(typeof(VrHands), "State").Invoke(hands, new object[] { sponge });
+                Action<bool> tick = active =>
+                {
+                    Set(state, "LastFrame", -1);
+                    if (active) sponge.UseContinuous(); else sponge.UpdateNotInUse();
+                };
+                tick(false); Near(check, visual.position, right.Position, "equipped idle sponge follows right controller");
+                check(rubs == 0 && fluidEmissions == 0, "idle sponge emits neither rub nor fluid");
+                Set(state, "Using", true); Set(state, "Blend", 1f); Set(sponge, "splatted", true);
+                tick(true);
+                check(rubs == 1 && fluidEmissions == 1, "native sponge contact emits one rub and one fluid collision");
+                Near(check, rubPoint, visual.position, "native sponge event matches visible contact");
+                Near(check, fluidPoint, visual.position, "native fluid emission matches visible sponge");
+                check(Convert.ToSingle(Backend.Field(sponge, "fillAmount")) < .8f, "native washing consumes sponge supply");
+                tick(false);
+                check(rubs == 1 && fluidEmissions == 1 && Backend.Field(sponge, "hitCollider") == null,
+                    "sponge release stops fluid and clears contact");
+                // The same component on a placed tool must stay on the original idle path.
+                hands.RestoreAll(); Set(manager, "_currentTool", otherTool);
+                Set(state, "LastFrame", -1); sponge.UpdateNotInUse();
+                Near(check, visual.localPosition, Vector3.zero, "unequipped sponge returns to authored local idle position");
+            }
+            finally
+            {
+                hands.RestoreAll(); eventField.SetValue(null, oldRub); managerField.SetValue(null, oldManager);
+                testPatch.UnpatchSelf(); UnityEngine.Object.Destroy(gameObject);
+                UnityEngine.Object.Destroy(tool); UnityEngine.Object.Destroy(otherTool); UnityEngine.Object.Destroy(fluid);
             }
         }
     }

@@ -55,6 +55,28 @@ namespace WalkNWash.VRCompanion
             catch (Exception e) { Fail(e); }
         }
         internal bool Active => !failed && enabled.Value && host.HandsMode;
+        internal void Maintain()
+        {
+            try
+            {
+                if (!Active) { RestoreAll(); return; }
+                foreach (var model in states.Keys.Where(m => !m).ToArray()) Restore(model);
+                foreach (var root in toolRoots.Keys.Where(t => !t).ToArray()) toolRoots.Remove(root);
+                foreach (var state in states.Values)
+                {
+                    if (host.TryHandFrame(state.Hand, out _)) continue;
+                    state.Using = state.PreviousValid = state.Valid = false;
+                    state.ContactPhysics(false); state.Show(false);
+                    Set(state.Model, "hitCollider", null); Set(state.Model, "splatted", false);
+                }
+                if (!host.TryHandFrame(2, out _))
+                {
+                    rightVisual?.Place(default, false);
+                    foreach (var root in toolRoots.Values) root.Show(false);
+                }
+            }
+            catch (Exception e) { Fail(e); }
+        }
         private void Hook(Type type, string name, string prefix = null, string postfix = null)
         {
             var method = AccessTools.Method(type, name) ?? throw new MissingMethodException(type.Name, name);
@@ -73,8 +95,15 @@ namespace WalkNWash.VRCompanion
         {
             internal readonly Vector3 Position;
             internal readonly Quaternion Rotation;
-            internal SavedTransform(Transform t) { Position = t.localPosition; Rotation = t.localRotation; }
-            internal void Restore(Transform t) { if (t) { t.localPosition = Position; t.localRotation = Rotation; } }
+            private readonly Renderer[] renderers;
+            private readonly bool[] visible;
+            internal SavedTransform(Transform t)
+            {
+                Position = t.localPosition; Rotation = t.localRotation;
+                renderers = t.GetComponentsInChildren<Renderer>(true); visible = renderers.Select(r => r.enabled).ToArray();
+            }
+            internal void Show(bool show) { for (int i = 0; i < renderers.Length; i++) if (renderers[i]) renderers[i].enabled = show && visible[i]; }
+            internal void Restore(Transform t) { if (t) { t.localPosition = Position; t.localRotation = Rotation; Show(true); } }
         }
         private sealed class ContactState
         {
@@ -83,6 +112,10 @@ namespace WalkNWash.VRCompanion
             internal SavedTransform Original;
             internal Renderer[] Renderers;
             internal bool[] RendererEnabled;
+            internal Collider[] Colliders;
+            internal bool[] ColliderEnabled;
+            internal MonoBehaviour[] Jiggle;
+            internal bool[] JiggleEnabled;
             internal HandVisual Fingers;
             internal HandFrame Frame;
             internal HandHit Hit;
@@ -92,7 +125,12 @@ namespace WalkNWash.VRCompanion
             internal int LastFrame = -1, Hand;
             internal void Show(bool visible)
             { for (int i = 0; i < Renderers.Length; i++) if (Renderers[i]) Renderers[i].enabled = visible && RendererEnabled[i]; }
-            internal void Restore() { Original.Restore(Visual); Show(true); Fingers?.Restore(); }
+            internal void ContactPhysics(bool active)
+            {
+                for (int i = 0; i < Colliders.Length; i++) if (Colliders[i]) Colliders[i].enabled = active && ColliderEnabled[i];
+                for (int i = 0; i < Jiggle.Length; i++) if (Jiggle[i]) Jiggle[i].enabled = active && JiggleEnabled[i];
+            }
+            internal void Restore() { Original.Restore(Visual); Show(true); ContactPhysics(true); Fingers?.Restore(); }
         }
         private ContactState State(MonoBehaviour model)
         {
@@ -101,6 +139,10 @@ namespace WalkNWash.VRCompanion
             value = new ContactState { Model = model, Visual = visual, Original = new SavedTransform(visual),
                 Hand = model is PlapperHand ? 1 : 2, Renderers = visual.GetComponentsInChildren<Renderer>(true) };
             value.RendererEnabled = value.Renderers.Select(r => r.enabled).ToArray();
+            value.Colliders = visual.GetComponentsInChildren<Collider>(true);
+            value.ColliderEnabled = value.Colliders.Select(c => c.enabled).ToArray();
+            value.Jiggle = visual.GetComponentsInChildren<MonoBehaviour>(true).Where(c => c && c.GetType().Name == "JiggleColliderExample").ToArray();
+            value.JiggleEnabled = value.Jiggle.Select(c => c.enabled).ToArray();
             if (model is PlapperHand) value.Fingers = new HandVisual(visual);
             states.Add(model, value);
             host.HandLog("Tracking " + model.GetType().Name + "; visual " + visual.name + "; parent " + visual.parent.name);
@@ -127,9 +169,11 @@ namespace WalkNWash.VRCompanion
             if (active && !state.Using) state.Fingers?.Restore();
             if (!active || !state.Using) Set(model, "splatted", false);
             state.Using = active;
+            state.ContactPhysics(false);
             state.Blend = Mathf.MoveTowards(state.Blend, active ? 1 : 0, Time.deltaTime * (active ? 20 : 8));
             state.Hit = active ? HandContact.Find(state.Frame, host.HandBodyEye, state.Previous, state.PreviousValid,
                 reach.Value, probeRadius.Value) : new HandHit { Point = state.Frame.Position, Normal = -(state.Frame.Rotation * Vector3.forward) };
+            state.ContactPhysics(active);
             state.Previous = state.Frame.Position; state.PreviousValid = state.Valid && active;
             Set(model, "lookOffset", Vector2.zero);
             Set(model, "usingT", state.Blend);
@@ -253,13 +297,17 @@ namespace WalkNWash.VRCompanion
         }
         private void TryDunk(ContactState state)
         {
-            if (Time.unscaledTime < state.NextDunk) return;
+            if (Time.unscaledTime < state.NextDunk || Number(state.Model, "fillAmount") >= .98f) return;
             var list = AccessTools.Field(typeof(Interactable), "_interactables").GetValue(null) as IEnumerable;
             if (list == null) return;
             foreach (Interactable item in list)
             {
                 if (!(item is InteractableWetSponge) || !item.gameObject.activeInHierarchy
-                    || Vector3.Distance(state.Frame.Position, item.transform.position) > .2f || !VisibleTarget(state.Frame.Position, item)) continue;
+                    || Vector3.Distance(state.Visual.position, item.transform.position) > .2f
+                    || Vector3.Distance(host.HandBodyEye, item.transform.position) > 2f
+                    || !HandContact.Clear(host.HandBodyEye, state.Frame.Position)
+                    || !VisibleTarget(state.Frame.Position, item)) continue;
+                if (((InteractableWetSponge)item).bucket == null || ((InteractableWetSponge)item).bucket.fillAmount <= 0) continue;
                 var tool = ToolManager.GetCurrentTool();
                 if (!(bool)AccessTools.Method(item.GetType(), "CanInteract").Invoke(item, new object[] { tool })) continue;
                 item.Interact(tool); state.NextDunk = Time.unscaledTime + .5f;
@@ -290,7 +338,9 @@ namespace WalkNWash.VRCompanion
                 var model = CurrentToolModel();
                 if (!model || model is ToolModelSponge) return;
                 if (!toolRoots.ContainsKey(model.transform)) toolRoots.Add(model.transform, new SavedTransform(model.transform));
-                if (host.TryHandFrame(2, out var frame)) model.transform.SetPositionAndRotation(frame.Position, frame.Rotation);
+                bool valid = host.TryHandFrame(2, out var frame);
+                toolRoots[model.transform].Show(valid);
+                if (valid) model.transform.SetPositionAndRotation(frame.Position, frame.Rotation);
                 // Native canceled callbacks stop spraying when tracking/focus is lost.
             }
             catch (Exception e) { Fail(e); }
@@ -302,7 +352,7 @@ namespace WalkNWash.VRCompanion
             if (left == null) return;
             if (rightSource != left.Visual)
             {
-                rightVisual?.Dispose(); rightVisual = HandVisual.Mirror(left.Visual); rightSource = left.Visual;
+                rightVisual?.Dispose(); rightVisual = HandVisual.Mirror(left.Visual, left.Fingers); rightSource = left.Visual;
             }
             bool empty = ToolManager.GetCurrentTool() == ToolManager.GetEmptyTool();
             bool valid = host.TryHandFrame(2, out var frame);

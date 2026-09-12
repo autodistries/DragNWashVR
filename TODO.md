@@ -3,20 +3,45 @@
 Keep one implementation task active. Commit completed changes separately.
 An implemented feature is not hardware-verified until the user tests it.
 
-## Current focus: controller-driven hands study
+## Current focus: validate v0.5.0 controller hands
 
-Study completed: [design and findings](docs/CONTROLLER_HANDS.md). No hand code
-installed; current build remains v0.4.1. Recommended next implementation: both
-controller poses, then controller-directed left-hand/sponge contact with original
-surface alignment and effects preserved. Idle visuals follow controllers without
-interaction. Finger posing and a visible right-hand model require a rig audit.
+Implemented: both controller poses; left hand/sponge contact and matching object
+selection; idle tracking; surface-compatible wrist twist; close-contact probes;
+contact haptics; idle finger curl; visual-only mirrored empty right hand; equipped
+tool/nozzle tracking; direct sponge dunking. Original contact animations/effects
+remain. Idle ordinary/jiggle colliders are suppressed. Lost tracking clears that
+hand's action/contact; both hands retain independent state.
 
-- [x] Trace hand/sponge target selection, native contact effects, object selection,
-  tool lifecycle, controller pose access, and finger-tracking requirements.
-- [ ] Inspect live hand/tool hierarchy and model axes; establish pose update order.
-- [ ] Prototype controller-directed left-hand/sponge reach and consistent object
-  targeting. Preserve wrapping, resource use, release, and independent hand state.
-- [ ] Add tracked idle poses and compatible wrist twist; tune near-contact reach.
+Asset audit: the first-person `plapper_L` has four finger chains and a separate
+jiggle collider. The mirrored right hand copies renderers/bones only. See
+[design and audit](docs/CONTROLLER_HANDS.md). Optical finger tracking is optional
+future work; current curl is inferred from controller inputs.
+
+Validation: 243 offline checks, C haptic ABI checks, and 101 checks inside Unity
+passed. Tests exercise actual hand/sponge contact callbacks, target coordinates,
+supply consumption, native fluid-emission calls, inactive/release behavior, object
+selection eligibility, independent tracking loss and the existing controls.
+Headset tests below remain unconfirmed.
+
+## Hand headset checks, in order
+
+- [ ] Idle hand/tool follows its controller. Grip/index curls idle fingers without
+  activating interactions. Mirrored empty right hand looks correct.
+- [ ] Hold left trigger: aim and rub with controller while looking elsewhere.
+  Surface wrapping/slap animation remains; no contact while idle/released.
+- [ ] Hold right trigger with sponge: scrub using controller motion. Visible
+  contact matches washing; supply drops. Wrist twist stays aligned with surface.
+- [ ] Left controller selects prompts/objects; buttons activate once. Right
+  controller still selects dialogue answers.
+- [ ] Hold both triggers, release one: the other remains active and movement works.
+  Losing one controller stops only its contact; release before reactivation.
+- [ ] Equip/unequip tools: no floating old model. Sprayer nozzle follows right
+  controller. Tune per-tool grip offsets if needed after reporting a mismatch.
+- [ ] Direct sponge dunk refills at a valid target, consumes bucket water, and
+  does not repeat when sponge is full. Existing left-trigger refill still works.
+- [ ] Contact haptics feel useful; near-contact and assisted reach feel natural.
+- [ ] Walk, turn, crouch, F10, F11, dialogue, and pause: hands stay aligned and
+  no stale contact/rendering survives. Repeat on OpenXR if using that backend.
 
 ## Previous build: v0.4.1 validation
 
@@ -68,9 +93,10 @@ Fix the first failing check before expanding scope. Record backend and relevant
 
 - [ ] Inventory other missing UI (inventory, menus); choose one concrete screen next.
 - [ ] General VR menu interaction.
-- [ ] Hand polish after prototype validation: sprayer/nozzle tracking, haptics,
-  finger curl, optional full hand tracking, visible right-hand asset, direct
-  sponge dunking. See the study for prerequisites and order.
+- [ ] Optional optical/skeletal finger tracking: capability probe, runtime instance
+  extension support, per-bone retargeting, and contact-pose blending.
+- [ ] Hand comfort tuning after headset feedback: model offsets, curl direction,
+  haptic strength, tracking latency, and optional purpose-made right-hand mesh.
 - [ ] Stick-based dialogue selection only if controller pointing proves unsuitable.
 
 ## Confirmed by user

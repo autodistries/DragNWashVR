@@ -1,7 +1,32 @@
 # Controller-driven hands: feasibility and design
 
 Study date: 2026-09-12. Companion baseline: v0.4.1 (`38d49c9`).
-Status: research completed; no hand implementation installed.
+Status: implemented in v0.5.0; headset validation pending. The original study
+below records the rationale. Implementation uses shared controller frames,
+controller-driven contact, preserved native effect tails, tracked idle poses,
+contact haptics, controller-derived curl, mirrored empty right hand, tool/nozzle
+tracking, and direct sponge dunking. Optical finger tracking remains optional.
+
+## Asset audit and validation update
+
+Read-only inspection of the installed serialized assets found `PlapperHand` in
+level1/3/4/5/6. Its `hand` reference resolves to `Hand/plapper_L`; skinned mesh
+`hamd` uses hand, index, middle, pinky and thumb bones (16 bone references).
+The visual subtree also contains `SlapCollider` with `JiggleColliderExample`,
+which registers/unregisters its collider in OnEnable/OnDisable. Idle VR hand code
+therefore disables this component along with ordinary colliders. No game assets
+were modified or copied into the repository.
+
+The sponge visual has a central bone and four corner bones, which remain under
+the original deformation/animation system. Active finger pose is also left to
+the original animator. The right-hand visual copies transforms and skinned
+renderers only and starts from the left hand's idle bone baseline.
+
+101 Unity checks cover actual contact callbacks and fluid-emission calls (the GPU
+fluid simulation is replaced only at its boundary in the standalone test), plus
+sponge resource use, release/tracking-loss handling, controller-directed object
+selection and prior controls. Hardware pose conventions, haptics and visuals
+remain headset checks. No claim of full optical finger tracking is made.
 
 ## Recommendation
 

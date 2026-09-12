@@ -32,15 +32,14 @@ namespace WalkNWash.VRCompanion
             Vector3 origin = frame.Position, direction = frame.Direction.normalized;
             var result = new HandHit { Point = origin + direction * Mathf.Min(reach, .35f), Normal = -direction };
             if (Vector3.Distance(origin, bodyEye) > 2f || !Clear(bodyEye, origin)) return result;
-            RaycastHit hit;
-            bool found = Physics.Raycast(origin, direction, out hit, reach, Mask, QueryTriggerInteraction.Ignore);
-            if (!found && radius > 0)
-                found = Physics.SphereCast(origin - direction * radius, radius, direction, out hit,
-                    .18f + radius, Mask, QueryTriggerInteraction.Ignore);
+            RaycastHit hit = default;
+            bool found = radius > 0 && Physics.SphereCast(origin - direction * radius, radius, direction, out hit,
+                Mathf.Min(reach, .18f) + radius, Mask, QueryTriggerInteraction.Ignore);
             Vector3 delta = origin - previous;
             if (!found && hadPrevious && radius > 0 && delta.sqrMagnitude > .00001f && delta.sqrMagnitude < .25f)
                 found = Physics.SphereCast(previous, radius, delta.normalized, out hit, delta.magnitude,
                     Mask, QueryTriggerInteraction.Ignore);
+            if (!found) found = Physics.Raycast(origin, direction, out hit, reach, Mask, QueryTriggerInteraction.Ignore);
             if (found && Vector3.Distance(bodyEye, hit.point) <= 2f && Clear(bodyEye, hit.point))
                 return new HandHit { Point = hit.point, Normal = hit.normal, Collider = hit.collider };
             return result;

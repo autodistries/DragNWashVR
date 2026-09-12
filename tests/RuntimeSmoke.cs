@@ -56,12 +56,21 @@ namespace WalkNWash.VRCompanion
                     check(jumps == 2, "A can jump again after release");
                     buttons.Release();
                     check(!actions.Player.Jump.IsPressed(), "synchronous release clears jump");
+                    step(0, 0, false, true);
+                    step(1, 1, false, true);
+                    buttons.Update(actions, 1, 1, false, true, false, true); InputSystem.Update();
+                    check(!actions.Player.Plap.IsPressed() && actions.Player.Attack.IsPressed(), "left tracking loss releases only left action");
+                    buttons.Update(actions, 1, 1, false, true, true, true); InputSystem.Update();
+                    check(!actions.Player.Plap.IsPressed(), "held trigger cannot reactivate on tracking return");
+                    step(0, 0, false, true); step(1, 1, false, true);
+                    check(actions.Player.Plap.IsPressed() && actions.Player.Attack.IsPressed(), "both actions work after physical release");
+                    buttons.Release();
                     actions.Player.Disable();
                 }
                 RuntimeDialogueSmoke.Run(check);
                 RuntimeHudSmoke.Run(check);
                 RuntimeLocomotionSmoke.Run(check);
-                log.LogInfo("RUNTIME SMOKE PASS: " + count + " Unity input/dialogue/HUD/locomotion checks.");
+                log.LogInfo("RUNTIME SMOKE PASS: " + count + " Unity input/dialogue/HUD/locomotion/hand checks.");
                 Application.Quit(0);
             }
             catch (Exception e)
