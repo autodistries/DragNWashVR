@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>WalkNWash.VRCompanion</AssemblyName>
+    <Version>0.6.43</Version>
+    <GameDir Condition="'$(GameDir)' == ''">$(HOME)/.local/share/Steam/steamapps/common/Drag'n Wash</GameDir>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="src/**/*.cs" />
+    <Reference Include="$(GameDir)/DragNWash_Data/Managed/Assembly-CSharp.dll" Private="false" />
+    <Reference Include="$(GameDir)/DragNWash_Data/Managed/com.naelstrof-raliv.fluid-rendering-for-games.dll" Private="false" />
+    <Reference Include="$(GameDir)/DragNWash_Data/Managed/UnityEngine.dll" Private="false" />
+    <Reference Include="$(GameDir)/DragNWash_Data/Managed/UnityEngine.CoreModule.dll" Private="false" />
+    <Reference Include="$(GameDir)/DragNWash_Data/Managed/UnityEngine.AnimationModule.dll" Private="false" />
+    <Reference Include="$(GameDir)/DragNWash_Data/Managed/UnityEngine.PhysicsModule.dll" Private="false" />
+    <Reference Include="$(GameDir)/DragNWash_Data/Managed/UnityEngine.TextRenderingModule.dll" Private="false" />
+    <Reference Include="$(GameDir)/DragNWash_Data/Managed/Unity.InputSystem.dll" Private="false" />
+    <Reference Include="$(GameDir)/DragNWash_Data/Managed/UnityEngine.UIModule.dll" Private="false" />
+    <Reference Include="$(GameDir)/DragNWash_Data/Managed/UnityEngine.UI.dll" Private="false" />
+    <Reference Include="$(GameDir)/DragNWash_Data/Managed/Unity.TextMeshPro.dll" Private="false" />
+    <Reference Include="$(GameDir)/DragNWash_Data/Managed/YarnSpinner.Unity.dll" Private="false" />
+    <Reference Include="$(GameDir)/DragNWash_Data/Managed/YarnSpinner.dll" Private="false" />
+    <Reference Include="$(GameDir)/BepInEx/core/BepInEx.Core.dll" Private="false" />
+    <Reference Include="$(GameDir)/BepInEx/core/BepInEx.Unity.Mono.dll" Private="false" />
+    <Reference Include="$(GameDir)/BepInEx/core/0Harmony.dll" Private="false" />
+  </ItemGroup>
+  <Target Name="CheckGameReferences" BeforeTargets="ResolveReferences">
+    <Error Condition="!Exists('$(GameDir)/DragNWash_Data/Managed/Assembly-CSharp.dll')"
+           Text="Set GameDir to the game installation containing DragNWash_Data and BepInEx." />
+  </Target>
+</Project>
