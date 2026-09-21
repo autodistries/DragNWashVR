@@ -1,4 +1,4 @@
-# DragonWashVR
+# DragNWashVR
 
 a mod for Drag'n Wash that lets you play it in VR.
 
@@ -23,8 +23,7 @@ The itch.io build is currently v0.9.1. Compared with this public v0.8.3 source, 
 
 ## What to do with this ?
 
-Prerequisites: have a copy of the game (Steam or itch.io), with BepInEx 6 beta
-(https://builds.bepinex.dev/projects/bepinex_be).
+Prerequisites: have a copy of the game (Steam or itch.io), with BepInEx 6 beta (https://builds.bepinex.dev/projects/bepinex_be), and UnityVRMod (https://github.com/NewUnityModder/UnityVRMod/)..
 
 ## Build
 
