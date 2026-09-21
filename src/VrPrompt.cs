@@ -32,7 +32,7 @@ namespace WalkNWash.VRCompanion
             canvas.enabled = false;
         }
 
-        internal void BeginEye(Backend backend, bool visible, bool triggers)
+        internal void BeginEye(Backend backend, bool visible, bool triggers, int freeHand = 1)
         {
             EndEye();
             if (!visible || !requested || backend.Rig == null) return;
@@ -55,7 +55,7 @@ namespace WalkNWash.VRCompanion
             foreach (Transform child in root.GetComponentsInChildren<Transform>(true)) child.gameObject.layer = layer;
             root.transform.SetPositionAndRotation(target, facing);
             root.transform.localScale = Vector3.one * Mathf.Clamp(delta.magnitude, .6f, 3f) * .001f;
-            badge.SetCaption(triggers ? "LT" : "LMB");
+            badge.SetCaption(triggers ? (freeHand == 1 ? "LT" : "RT") : "LMB");
             canvas.enabled = true;
             Canvas.ForceUpdateCanvases();
         }

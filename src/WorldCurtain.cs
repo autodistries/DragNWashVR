@@ -35,7 +35,11 @@ namespace WalkNWash.VRCompanion
             get
             {
                 if (QuickTests.Mask) return 1;
-                if ((VrScreen.CurrentMenu is MenuLoading loading && loading.isShown) || IntermissionFade.isRunning || TransitionRunning) return 1;
+                // MenuManager can briefly retain a managed reference to a Unity-destroyed
+                // loading menu while scenes swap. Check Unity object validity before
+                // touching its serialized state so scene transitions cannot disable VR.
+                var menu = VrScreen.CurrentMenu;
+                if ((menu && menu is MenuLoading loading && loading.isShown) || IntermissionFade.isRunning || TransitionRunning) return 1;
                 var fader = AccessTools.Field(typeof(BlackoutFader), "_instance").GetValue(null) as BlackoutFader;
                 var group = fader ? Backend.Field(fader, "canvasGroup") as CanvasGroup : null;
                 return group && group.isActiveAndEnabled ? Mathf.Clamp01(group.alpha) : 0;

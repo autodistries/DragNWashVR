@@ -27,14 +27,15 @@ namespace WalkNWash.VRCompanion
         private readonly TMP_Text[] labels = new TMP_Text[PageSize];
         private readonly Image[] rows = new Image[PageSize];
         private Image previous, next, cursor, background;
-        private LineRenderer laser;
-        private Material uiMaterial, fontMaterial, laserMaterial;
+        private VrBeam beam;
+        private Material uiMaterial, fontMaterial;
         private TMP_FontAsset font;
         private readonly List<DialogueChoice> choices = new List<DialogueChoice>();
         private readonly DialogueStyle desktopStyle = new DialogueStyle();
         private readonly Color[] rowNormal = new Color[PageSize], rowHover = new Color[PageSize];
         private int page;
-        private bool anchored, canContinue, laserRequested;
+        private bool anchored, canContinue, followingView;
+        private const float FollowResponse = 18f;
         private static readonly Color Normal = new Color(.76f, .73f, .67f, .78f);
         private static readonly Color Hover = new Color(.62f, .73f, .78f, .86f);
 
@@ -107,25 +108,7 @@ namespace WalkNWash.VRCompanion
             footer.alignment = TextAlignmentOptions.Center;
             triggerBadge = TriggerBadge.Create(root.transform, uiMaterial, "RT", 82, 48);
             cursor = Box("Pointer", root.transform, 0, 0, 12, 12, Color.cyan);
-            var beam = new GameObject("Controller ray", typeof(LineRenderer));
-            beam.transform.SetParent(root.transform, false);
-            laser = beam.GetComponent<LineRenderer>();
-            laser.positionCount = 2;
-            laser.useWorldSpace = true;
-            laser.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            laser.receiveShadows = false;
-            laser.sortingLayerID = canvas.sortingLayerID;
-            // Ignore scene depth, but let the dialogue canvas composite over the beam.
-            laser.sortingOrder = canvas.sortingOrder - 1;
-            // UI shader honors the depth override; Sprites/Default ignores it.
-            laserMaterial = new Material(Graphic.defaultGraphicMaterial);
-            laserMaterial.mainTexture = Texture2D.whiteTexture;
-            // Renderer-vs-Canvas sortingOrder is not a reliable cross-renderer boundary.
-            // Draw after opaque world geometry, but one queue before default transparent UI.
-            laserMaterial.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent - 1;
-            laserMaterial.SetInt("unity_GUIZTestMode", (int)UnityEngine.Rendering.CompareFunction.Always);
-            laser.sharedMaterial = laserMaterial;
-            laser.startColor = laser.endColor = Color.cyan;
+            beam = new VrBeam(root.transform, canvas.sortingLayerID, canvas.sortingOrder);
             EndEye();
         }
 
@@ -218,33 +201,70 @@ namespace WalkNWash.VRCompanion
         private static bool Contains(RectTransform rect, Vector3 local)
             => rect.rect.Contains((Vector2)local - rect.anchoredPosition);
 
-        internal void Place(Transform rig, Vector3 head, Quaternion rotation, float width, float distance)
+        internal static float FollowBlend(float deltaTime)
         {
-            if (root.transform.parent != rig) { root.transform.SetParent(rig, false); anchored = false; }
-            if (!anchored)
+            float dt = Mathf.Clamp(deltaTime, 1f / 240f, .05f);
+            return 1f - Mathf.Exp(-FollowResponse * dt);
+        }
+
+        internal void Place(Transform rig, Vector3 head, Quaternion rotation, float width, float distance, bool followView = false)
+        {
+            if (root.transform.parent != rig)
             {
-                // Follow the starting gaze, including pitch, then lower the panel.
-                // Keep it anchored for stable aiming throughout the conversation.
-                Quaternion view = Quaternion.LookRotation(rotation * Vector3.forward, Vector3.up);
-                Quaternion facing = view * Quaternion.Euler(18, 0, 0);
-                root.transform.localPosition = head + facing * Vector3.forward * distance;
-                root.transform.localRotation = facing;
-                anchored = true;
+                root.transform.SetParent(rig, false);
+                anchored = followingView = false;
+            }
+
+            Quaternion view = Quaternion.LookRotation(rotation * Vector3.forward, Vector3.up);
+            Quaternion facing = view * Quaternion.Euler(18, 0, 0);
+            Vector3 targetPosition = head + facing * Vector3.forward * distance;
+
+            if (followView)
+            {
+                // Snap when follow mode first starts, then use frame-rate-independent
+                // exponential smoothing to reduce small headset jitter without making
+                // dialogue feel detached from the view.
+                if (!followingView || !anchored)
+                {
+                    root.transform.localPosition = targetPosition;
+                    root.transform.localRotation = facing;
+                }
+                else
+                {
+                    float blend = FollowBlend(Time.unscaledDeltaTime);
+                    root.transform.localPosition = Vector3.Lerp(root.transform.localPosition, targetPosition, blend);
+                    root.transform.localRotation = Quaternion.Slerp(root.transform.localRotation, facing, blend);
+                }
+                anchored = followingView = true;
+            }
+            else
+            {
+                // Normal dialogue follows the starting gaze once, then remains anchored
+                // for stable aiming throughout the conversation.
+                if (!anchored)
+                {
+                    root.transform.localPosition = targetPosition;
+                    root.transform.localRotation = facing;
+                    anchored = true;
+                }
+                followingView = false;
             }
             root.transform.localScale = Vector3.one * width / 1000;
         }
         internal Transform Surface => root.transform;
-        internal void Recenter() { anchored = false; }
+        internal void Recenter() { anchored = followingView = false; }
 
         internal int Point(Ray ray, bool tracked)
         {
+            // User-specific overlays such as preference sliders may be created after
+            // the panel itself. Keep the laser hit marker above every panel child.
+            cursor.rectTransform.SetAsLastSibling();
             cursor.enabled = false;
-            laserRequested = tracked;
-            laser.enabled = tracked;
+            beam.SetTracked(tracked);
             for (int i = 0; i < rows.Length; i++) rows[i].color = rowNormal[i];
             previous.color = next.color = Normal;
             if (!tracked) return None;
-            laser.startWidth = laser.endWidth = .003f * root.transform.parent.lossyScale.x;
+            float width = .003f * root.transform.parent.lossyScale.x;
             Vector3 origin = root.transform.InverseTransformPoint(ray.origin);
             Vector3 direction = root.transform.InverseTransformDirection(ray.direction);
             int hit = None;
@@ -274,8 +294,7 @@ namespace WalkNWash.VRCompanion
                     }
                 }
             }
-            laser.SetPosition(0, ray.origin);
-            laser.SetPosition(1, end);
+            beam.Set(ray.origin, end, width);
             return hit;
         }
 
@@ -291,23 +310,23 @@ namespace WalkNWash.VRCompanion
         {
             foreach (Transform item in root.GetComponentsInChildren<Transform>(true)) item.gameObject.layer = layer;
             canvas.enabled = true;
-            laser.enabled = laserRequested;
+            beam.Show(layer);
             Canvas.ForceUpdateCanvases();
         }
         internal void EndEye()
         {
             if (canvas != null) canvas.enabled = false;
-            if (laser != null) laser.enabled = false;
+            beam?.EndEye();
         }
-        internal void Hide() { EndEye(); Recenter(); laserRequested = false; }
+        internal void Hide() { EndEye(); Recenter(); beam?.Clear(); }
         public void Dispose()
         {
             desktopStyle.Dispose();
+            beam?.Dispose();
             if (root != null) UnityEngine.Object.Destroy(root);
             if (uiMaterial != null) UnityEngine.Object.Destroy(uiMaterial);
             if (fontMaterial != null) UnityEngine.Object.Destroy(fontMaterial);
-            if (laserMaterial != null) UnityEngine.Object.Destroy(laserMaterial);
-            root = null;
+            beam = null; root = null;
         }
     }
 }

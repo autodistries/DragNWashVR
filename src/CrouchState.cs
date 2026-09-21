@@ -4,28 +4,30 @@ namespace WalkNWash.VRCompanion
 {
     internal static class CrouchBinding
     {
-        internal static bool OpenVrPressed(int hand, ulong buttons)
-            => hand == 1 && (buttons & (1UL << 7)) != 0;
+        internal static bool OpenVrPressed(int hand, ulong buttons, bool trackpadOnly = false)
+            => hand == 1 && (buttons & (1UL << (trackpadOnly ? 2 : 7))) != 0;
         internal static string OpenXrPath(string profile)
             => profile == "oculus/touch_controller" ? "/user/hand/left/input/x/click"
-                : profile == "valve/index_controller" ? "/user/hand/left/input/a/click" : null;
+                : profile == "valve/index_controller" ? "/user/hand/left/input/a/click"
+                : profile == "htc/vive_controller" ? "/user/hand/left/input/squeeze/click" : null;
     }
 
     internal sealed class CrouchState
     {
         private HudToggle toggle;
-        private bool physical;
+        private bool physical, desktopOverride;
         private bool? forced;
         internal float Baseline { get; private set; }
         // Eye-level/local reference spaces can report zero. Keep seated calibration useful.
         internal float ReferenceHeight => Math.Max(.5f, Baseline);
         internal bool Automatic => !forced.HasValue;
+        internal bool HeightDriven => Automatic && !desktopOverride;
         internal bool Crouched => forced ?? physical;
 
         internal void Calibrate(float height)
         {
             Baseline = Valid(height) ? height : 0;
-            physical = false;
+            physical = desktopOverride = false;
             forced = null;
             toggle = new HudToggle();
         }
@@ -48,7 +50,18 @@ namespace WalkNWash.VRCompanion
         }
 
         internal float Posture(float desktop)
-            => desktop > 0 ? desktop : (forced.HasValue ? (forced.Value ? -1 : 0) : (physical ? -1 : desktop));
+        {
+            desktopOverride = desktop != 0;
+            return desktop > 0 ? desktop : (forced.HasValue ? (forced.Value ? -1 : 0) : (physical ? -1 : desktop));
+        }
+
+        internal float CapsulePosture(float height, float worldScale, float standingCylinderHeight)
+        {
+            if (!Valid(height) || !Valid(worldScale) || worldScale <= 0 || !Valid(standingCylinderHeight) || standingCylinderHeight <= .001f) return 1;
+            // Keep the authored standing size and spherical end caps. Only the
+            // cylindrical section shrinks continuously with physical head lowering.
+            return Math.Max(0, Math.Min(1, 1 + (height - Baseline) * worldScale / standingCylinderHeight));
+        }
 
         internal static bool Valid(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
 
@@ -56,11 +69,14 @@ namespace WalkNWash.VRCompanion
         {
             if (!Valid(height)) return 0;
             float raw = height - Baseline;
-            float mapped = raw / ReferenceHeight * avatarHeight;
+            float mapped = raw * worldScale;
             // Don't push the eye below the feet when kneeling deeply.
             mapped = Math.Max(.15f - avatarHeight, mapped);
-            // Physical lowering and the capsule's crouch use the deeper offset, not their sum.
-            float desired = mapped < 0 && gameDrop < 0 ? Math.Min(mapped, gameDrop) : mapped + gameDrop;
+            // In height mode the tracked pose owns vertical camera motion. Cancel
+            // native crouch animation/smoothing instead of adding a second drop.
+            // Explicit X/desktop overrides retain native crouch/stretch behavior.
+            float desired = HeightDriven ? mapped :
+                (mapped < 0 && gameDrop < 0 ? Math.Min(mapped, gameDrop) : mapped + gameDrop);
             return desired - gameDrop - raw * worldScale;
         }
     }

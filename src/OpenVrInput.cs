@@ -13,10 +13,13 @@ namespace WalkNWash.VRCompanion
         private readonly MethodInfo role, state, property;
         private readonly Type roleType, stateType, propertyType, errorType;
         private readonly float[] squeeze = new float[2];
+        private readonly Action<string> log;
+        private readonly string[] status = new string[2];
 
-        internal OpenVrInput(object system)
+        internal OpenVrInput(object system, Action<string> log = null)
         {
             this.system = system ?? throw new InvalidOperationException("OpenVR system is null");
+            this.log = log;
             Type type = system.GetType();
             role = AccessTools.Method(type, "GetTrackedDeviceIndexForControllerRole");
             state = AccessTools.Method(type, "GetControllerState");
@@ -40,29 +43,43 @@ namespace WalkNWash.VRCompanion
             jump = false;
             hudToggle = crouchToggle = menu = false;
             uint index = (uint)role.Invoke(system, new[] { Enum.ToObject(roleType, hand) });
-            if (index == uint.MaxValue) return Vector2.zero;
+            if (index == uint.MaxValue)
+            { Report(hand, "unavailable: no left/right controller role assigned"); return Vector2.zero; }
             object[] args = { index, Activator.CreateInstance(stateType), (uint)Marshal.SizeOf(stateType) };
-            if (!(bool)state.Invoke(system, args)) return Vector2.zero;
-            jump = JumpBinding.OpenVrPressed(hand, Convert.ToUInt64(Backend.Field(args[1], "ulButtonPressed")));
-            hudToggle = HudToggleBinding.OpenVrPressed(hand, Convert.ToUInt64(Backend.Field(args[1], "ulButtonPressed")));
-            crouchToggle = CrouchBinding.OpenVrPressed(hand, Convert.ToUInt64(Backend.Field(args[1], "ulButtonPressed")));
-            menu = MenuHold.OpenVrPressed(hand, Convert.ToUInt64(Backend.Field(args[1], "ulButtonPressed")));
-            int axis = 0;
+            if (!(bool)state.Invoke(system, args))
+            { Report(hand, "unavailable: GetControllerState failed for device " + index); return Vector2.zero; }
+            ulong pressed = Convert.ToUInt64(Backend.Field(args[1], "ulButtonPressed"));
+            var axes = new ControllerAxes();
             int triggerType = 0;
             for (int i = 0; i < 5; i++)
             {
                 object[] propArgs = { index, Enum.ToObject(propertyType, 3002 + i), Enum.ToObject(errorType, 0) };
                 int axisType = (int)property.Invoke(system, propArgs);
                 if (Convert.ToInt32(propArgs[2]) != 0) continue;
-                if (axisType == 2) axis = i;
+                axes.Observe(i, axisType);
                 if (i == 1) triggerType = axisType;
             }
+            jump = JumpBinding.OpenVrPressed(hand, pressed, axes.TrackpadOnly);
+            hudToggle = HudToggleBinding.OpenVrPressed(hand, pressed);
+            crouchToggle = CrouchBinding.OpenVrPressed(hand, pressed, axes.TrackpadOnly);
+            menu = MenuHold.OpenVrPressed(hand, pressed);
             trigger = TriggerBinding.OpenVrValue(triggerType,
                 Convert.ToSingle(Backend.Field(Backend.Field(args[1], "rAxis1"), "x")),
-                Convert.ToUInt64(Backend.Field(args[1], "ulButtonPressed")));
-            object value = Backend.Field(args[1], "rAxis" + axis);
-            squeeze[hand - 1] = Mathf.Clamp01(Convert.ToSingle(Backend.Field(Backend.Field(args[1], "rAxis2"), "x")));
+                pressed);
+            squeeze[hand - 1] = axes.TrackpadOnly ? ((pressed & (1UL << 2)) != 0 ? 1 : 0)
+                : Mathf.Clamp01(Convert.ToSingle(Backend.Field(Backend.Field(args[1], "rAxis2"), "x")));
+            Report(hand, "device " + index + (axes.Index < 0 ? ": no joystick/trackpad axis reported"
+                : (axes.TrackpadOnly ? ": trackpad axis " : ": joystick axis ") + axes.Index));
+            if (axes.Index < 0) return Vector2.zero;
+            object value = Backend.Field(args[1], "rAxis" + axes.Index);
             return new Vector2(Convert.ToSingle(Backend.Field(value, "x")), Convert.ToSingle(Backend.Field(value, "y")));
+        }
+
+        private void Report(int hand, string message)
+        {
+            if (status[hand - 1] == message) return;
+            status[hand - 1] = message;
+            log?.Invoke("OpenVR " + (hand == 1 ? "left" : "right") + " controller " + message);
         }
 
         public void Poll(out Vector2 move, out Vector2 turn, out float leftTrigger, out float rightTrigger, out bool jump, out bool hudToggle, out bool crouchToggle, out bool menu)

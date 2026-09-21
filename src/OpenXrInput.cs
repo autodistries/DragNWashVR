@@ -54,7 +54,7 @@ namespace WalkNWash.VRCompanion
                 rightTriggerAction = Create("primary", "Interact or use hand", 2);
                 jumpAction = Create("jump", "Jump", 1);
                 hudToggleAction = Create("toggle_hud", "Toggle progress HUD", 1);
-                menuAction = Create("menu_hold", "Hold for Escape", 1);
+                menuAction = Create("menu_hold", "Pause or preferences", 1);
                 crouchToggleAction = Create("toggle_crouch", "Override crouch", 1);
                 aimAction = Create("right_aim", "Point at dialogue", 4);
                 handAimActions[1] = aimAction;
@@ -87,9 +87,11 @@ namespace WalkNWash.VRCompanion
                         profileBindings.Add(new Binding { action = hapticActions[i], path = Path(hand + "/output/haptic") });
                         if (profile == "oculus/touch_controller" || profile == "valve/index_controller")
                             profileBindings.Add(new Binding { action = squeezeActions[i], path = Path(hand + "/input/squeeze/value") });
+                        else if (profile == "htc/vive_controller")
+                            profileBindings.Add(new Binding { action = squeezeActions[i], path = Path(hand + "/input/squeeze/click") });
                     }
-                    // Only profiles with an A button get this binding. An invalid
-                    // path would reject the entire profile, including the sticks.
+                    // Bind only controls available on this profile. Unsupported paths
+                    // reject the entire profile, including tracking and movement.
                     string jumpPath = JumpBinding.OpenXrPath(profile);
                     if (jumpPath != null) profileBindings.Add(new Binding { action = jumpAction, path = Path(jumpPath) });
                     string hudPath = HudToggleBinding.OpenXrPath(profile);

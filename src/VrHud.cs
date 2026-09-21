@@ -97,8 +97,9 @@ namespace WalkNWash.VRCompanion
         private readonly List<Image> fills = new List<Image>();
         private Material material, fontMaterial;
         private TMP_FontAsset font;
-        private int frame = -1;
-        private bool displayed;
+        private int frame = -1, poseFrame = -1;
+        private bool displayed, placed;
+        private const float FollowResponse = 18f;
 
         private static RectTransform Rect(GameObject go, Transform parent, Vector2 size, Vector2 position)
         {
@@ -143,7 +144,7 @@ namespace WalkNWash.VRCompanion
         }
         internal void Present(IList<HudReading> readings)
         {
-            if (readings.Count == 0) { displayed = false; EndEye(); return; }
+            if (readings.Count == 0) { displayed = placed = false; EndEye(); return; }
             Create();
             displayed = true;
             float height = readings.Count * 38 + 12;
@@ -186,27 +187,54 @@ namespace WalkNWash.VRCompanion
             }
             for (int i = readings.Count; i < rows.Count; i++) rows[i].SetActive(false);
         }
+        internal static float FollowBlend(float deltaTime)
+        {
+            float dt = Mathf.Clamp(deltaTime, 1f / 240f, .05f);
+            return 1f - Mathf.Exp(-FollowResponse * dt);
+        }
+
         internal void Place(Transform rig, Vector3 head, Quaternion rotation, float scale, float horizontal, float vertical)
         {
-            root.transform.SetParent(rig, false);
+            if (root.transform.parent != rig)
+            {
+                root.transform.SetParent(rig, false);
+                placed = false;
+            }
             float unit = .001f * scale;
             float height = root.GetComponent<RectTransform>().rect.height;
             // Settings locate the upper-left edge; rows grow downwards.
-            root.transform.localPosition = head + rotation * new Vector3(horizontal + 180 * unit, vertical - height * unit / 2, 1.2f);
-            root.transform.localRotation = rotation;
+            Vector3 targetPosition = head + rotation * new Vector3(horizontal + 180 * unit, vertical - height * unit / 2, 1.2f);
+            if (!placed)
+            {
+                root.transform.localPosition = targetPosition;
+                root.transform.localRotation = rotation;
+            }
+            else
+            {
+                float blend = FollowBlend(Time.unscaledDeltaTime);
+                root.transform.localPosition = Vector3.Lerp(root.transform.localPosition, targetPosition, blend);
+                root.transform.localRotation = Quaternion.Slerp(root.transform.localRotation, rotation, blend);
+            }
             root.transform.localScale = Vector3.one * unit;
+            placed = true;
         }
         internal void BeginEye(Backend backend, bool visible, float scale, float horizontal, float vertical, bool showSpongeSupply = false)
         {
-            if (!visible || backend.Rig == null) { EndEye(); return; }
+            if (!visible || backend.Rig == null) { placed = false; poseFrame = -1; EndEye(); return; }
             if (frame != Time.frameCount)
             {
                 frame = Time.frameCount;
                 source.Read(showSpongeSupply);
                 Present(source.Readings);
             }
-            if (!displayed || !backend.HeadPose(out var head, out var rotation)) { EndEye(); return; }
-            Place(backend.Rig.transform, head, rotation, scale, horizontal, vertical);
+            if (!displayed || !backend.HeadPose(out var head, out var rotation)) { placed = false; poseFrame = -1; EndEye(); return; }
+            // Stereo eye callbacks can both run in one game frame. Advance smoothing
+            // once per frame so the response does not depend on the number of eyes.
+            if (poseFrame != Time.frameCount)
+            {
+                poseFrame = Time.frameCount;
+                Place(backend.Rig.transform, head, rotation, scale, horizontal, vertical);
+            }
             var left = Backend.Field(backend.Setup, "_leftVrCamera") as Camera;
             var right = Backend.Field(backend.Setup, "_rightVrCamera") as Camera;
             int mask = left != null && right != null ? left.cullingMask & right.cullingMask : 0;
@@ -223,13 +251,13 @@ namespace WalkNWash.VRCompanion
             Canvas.ForceUpdateCanvases();
         }
         internal void EndEye() { if (canvas != null) canvas.enabled = false; }
-        internal void Reset() { EndEye(); frame = -1; displayed = false; }
+        internal void Reset() { EndEye(); frame = poseFrame = -1; displayed = placed = false; }
         public void Dispose()
         {
             if (root != null) UnityEngine.Object.Destroy(root);
             if (material != null) UnityEngine.Object.Destroy(material);
             if (fontMaterial != null) UnityEngine.Object.Destroy(fontMaterial);
-            root = null; rows.Clear(); labels.Clear(); fills.Clear(); tracks.Clear();
+            root = null; frame = poseFrame = -1; displayed = placed = false; rows.Clear(); labels.Clear(); fills.Clear(); tracks.Clear();
         }
     }
 }

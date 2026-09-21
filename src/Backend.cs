@@ -12,6 +12,8 @@ namespace WalkNWash.VRCompanion
         internal readonly bool IsOpenXr;
         private IControllerInput input;
         private bool inputAttempted;
+        private bool disposed, initializationFailed, pollingFailed, requireNeutral;
+        private float nextInputAttempt, nextPollAttempt;
         private readonly Action<string> log;
         private int pollFrame = -1;
         private bool hapticsFailed;
@@ -48,37 +50,66 @@ namespace WalkNWash.VRCompanion
 
         internal void InitializeInput()
         {
-            if (inputAttempted) return;
+            if (disposed || input != null || Time.unscaledTime < nextInputAttempt) return;
             inputAttempted = true;
+            nextInputAttempt = Time.unscaledTime + 2f;
             try
             {
                 input = IsOpenXr
                     ? (IControllerInput)new OpenXrInput(Convert.ToUInt64(Field(Setup, "_xrInstance")),
                         Convert.ToUInt64(Field(Setup, "_xrSession")), log)
-                    : new OpenVrInput(Field(Setup, "_hmd"));
-                log((IsOpenXr ? "OpenXR" : "OpenVR") + " thumbstick input attached.");
+                    : new OpenVrInput(Field(Setup, "_hmd"), log);
+                requireNeutral = initializationFailed;
+                initializationFailed = false;
+                log((IsOpenXr ? "OpenXR" : "OpenVR") + " controller input attached.");
             }
-            catch (Exception e) { log("Controller input unavailable; camera follow remains active: " + e.Message); }
+            catch (Exception e)
+            {
+                if (!initializationFailed)
+                    log("Controller input unavailable; will retry while VR is active: " + (e.InnerException ?? e).Message);
+                initializationFailed = true;
+            }
         }
 
         internal void Poll()
         {
-            if (pollFrame == Time.frameCount) return;
+            if (disposed || pollFrame == Time.frameCount) return;
             pollFrame = Time.frameCount;
+            ClearInput();
+            if (input == null && inputAttempted) InitializeInput();
+            if (input == null || !Focused || Time.unscaledTime < nextPollAttempt) return;
+            try
+            {
+                input.Poll(out Move, out Turn, out LeftTrigger, out RightTrigger, out Jump, out ToggleHud, out ToggleCrouch, out Menu);
+                if (pollingFailed) log("Controller input recovered; release controls to resume.");
+                pollingFailed = false;
+                if (requireNeutral)
+                {
+                    requireNeutral = !CrouchState.Valid(Move.x) || !CrouchState.Valid(Move.y)
+                        || !CrouchState.Valid(Turn.x) || !CrouchState.Valid(Turn.y)
+                        || !CrouchState.Valid(LeftTrigger) || !CrouchState.Valid(RightTrigger)
+                        || Move.sqrMagnitude > .04f || Turn.sqrMagnitude > .04f
+                        || LeftTrigger > .35f || RightTrigger > .35f || Jump || ToggleHud || ToggleCrouch || Menu;
+                    ClearInput();
+                }
+            }
+            catch (Exception e) { InputError(e); }
+        }
+
+        private void ClearInput()
+        {
             Move = Turn = Vector2.zero;
             LeftTrigger = RightTrigger = 0;
             Jump = ToggleHud = ToggleCrouch = Menu = false;
-            if (input == null || !Focused) return;
-            try { input.Poll(out Move, out Turn, out LeftTrigger, out RightTrigger, out Jump, out ToggleHud, out ToggleCrouch, out Menu); }
-            catch (Exception e)
-            {
-                log("Controller polling stopped: " + e.Message);
-                input.Dispose();
-                input = null;
-                Move = Turn = Vector2.zero;
-                LeftTrigger = RightTrigger = 0;
-                Jump = ToggleHud = ToggleCrouch = Menu = false;
-            }
+        }
+
+        private void InputError(Exception e)
+        {
+            if (!pollingFailed) log("Controller polling interrupted; will retry: " + (e.InnerException ?? e).Message);
+            pollingFailed = requireNeutral = true;
+            nextPollAttempt = Time.unscaledTime + 2f;
+            ClearInput();
+            // Keep the action set alive: OpenXR only allows attaching once per session.
         }
 
         internal bool HeadPose(out Vector3 position, out Quaternion rotation)
@@ -119,28 +150,37 @@ namespace WalkNWash.VRCompanion
         {
             position = Vector3.zero;
             rotation = Quaternion.identity;
-            if (!Focused) return false;
-            if (input is OpenXrInput xr)
-                return xr.Aim(Convert.ToUInt64(Field(Setup, "_appSpace")),
-                    Convert.ToInt64(Field(Field(Setup, "_xrFrameState"), "predictedDisplayTime")), out position, out rotation);
-            return input is OpenVrInput vr && vr.Aim(Field(Setup, "_trackedPoses") as Array, out position, out rotation);
+            if (disposed || pollingFailed || !Focused) return false;
+            try
+            {
+                if (input is OpenXrInput xr)
+                    return xr.Aim(Convert.ToUInt64(Field(Setup, "_appSpace")),
+                        Convert.ToInt64(Field(Field(Setup, "_xrFrameState"), "predictedDisplayTime")), out position, out rotation);
+                return input is OpenVrInput vr && vr.Aim(Field(Setup, "_trackedPoses") as Array, out position, out rotation);
+            }
+            catch (Exception e) { InputError(e); return false; }
         }
 
         internal bool Hand(int hand, bool aim, out Vector3 position, out Quaternion rotation)
         {
             position = Vector3.zero; rotation = Quaternion.identity;
-            if (hand < 1 || hand > 2 || !Focused) return false;
+            if (disposed || pollingFailed || hand < 1 || hand > 2 || !Focused) return false;
             if (input == null) return false;
             ulong space = IsOpenXr ? Convert.ToUInt64(Field(Setup, "_appSpace")) : 0;
             long time = IsOpenXr ? Convert.ToInt64(Field(Field(Setup, "_xrFrameState"), "predictedDisplayTime")) : 0;
             var poses = IsOpenXr ? null : Field(Setup, "_trackedPoses") as Array;
-            bool valid = input.Hand(hand, aim, space, time, poses, out position, out rotation);
-            return valid && Finite(position) && Finite(rotation);
+            try
+            {
+                bool valid = input.Hand(hand, aim, space, time, poses, out position, out rotation);
+                return valid && Finite(position) && Finite(rotation);
+            }
+            catch (Exception e) { InputError(e); return false; }
         }
         internal float Squeeze(int hand)
         {
-            if (!Focused) return 0;
-            return input?.Squeeze(hand) ?? 0;
+            if (disposed || pollingFailed || requireNeutral || !Focused) return 0;
+            try { return input?.Squeeze(hand) ?? 0; }
+            catch (Exception e) { InputError(e); return 0; }
         }
         internal void Pulse(int hand, float strength)
         {
@@ -166,7 +206,12 @@ namespace WalkNWash.VRCompanion
                 new Vector3(Number(m, "m1"), Number(m, "m5"), -Number(m, "m9")));
             return !(float.IsNaN(position.x) || float.IsNaN(position.y) || float.IsNaN(position.z));
         }
-        public void Dispose() { input?.Dispose(); input = null; }
+        public void Dispose()
+        {
+            disposed = true;
+            try { input?.Dispose(); }
+            finally { input = null; ClearInput(); }
+        }
     }
 
     internal interface IControllerInput : IDisposable

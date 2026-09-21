@@ -3,10 +3,14 @@
     <TargetFramework>netstandard2.1</TargetFramework>
     <LangVersion>latest</LangVersion>
     <AssemblyName>WalkNWash.VRCompanion</AssemblyName>
-    <Version>0.6.43</Version>
+    <Version>0.8.3</Version>
     <GameDir Condition="'$(GameDir)' == ''">$(HOME)/.local/share/Steam/steamapps/common/Drag'n Wash</GameDir>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(SmokeTest)' == 'true'">
+    <DefineConstants>$(DefineConstants);VR_COMPANION_SMOKE_TEST</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="src/**/*.cs" />

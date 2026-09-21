@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using HarmonyLib;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 namespace WalkNWash.VRCompanion
@@ -16,8 +17,10 @@ namespace WalkNWash.VRCompanion
         private RenderTexture texture;
         private RawImage picture;
         private Image cursor;
+        private VrBeam beam;
+        // Alias retained for runtime checks that inspect the primary beam renderer.
         private LineRenderer laser;
-        private Material material, laserMaterial;
+        private Material material;
         private bool laserRequested;
         private bool anchored, pressed;
         private Vector3 anchorPosition;
@@ -31,16 +34,23 @@ namespace WalkNWash.VRCompanion
         private EventSystem eventSystem;
         private readonly List<RaycastResult> hits = new List<RaycastResult>();
         private Menu sourceMenu;
+        internal const string CreditsSceneName = "EndScene";
         internal static bool Capturing { get; private set; }
         internal static Menu CurrentMenu => Backend.Field(AccessTools.Field(typeof(MenuManager), "_instance").GetValue(null), "_currentMenu") as Menu;
+        internal static bool IsCreditsScene(string sceneName)
+            => string.Equals(sceneName, CreditsSceneName, StringComparison.Ordinal);
+        internal static bool CreditsScene => IsCreditsScene(SceneManager.GetActiveScene().name);
+        private static bool InteractiveMenu(Menu menu) => menu && !(menu is MenuUnpaused) && menu.isShown;
         internal static bool Wanted
         {
             get
             {
                 if (QuickTests.Sample) return true;
-                var menu = CurrentMenu;
-                if (menu && !(menu is MenuUnpaused) && menu.isShown) return true;
+                if (InteractiveMenu(CurrentMenu)) return true;
                 if (IntermissionFade.isRunning || WorldCurtain.TransitionRunning) return true;
+                // EndScene is the game's dedicated credits scene. Its presentation is
+                // serialized screen-space UI rather than a Menu, so capture it explicitly.
+                if (CreditsScene) return true;
                 return false; // Blackout fades cover the world, not a flat UI screen.
             }
         }
@@ -59,22 +69,8 @@ namespace WalkNWash.VRCompanion
             cursor = Child<Image>("Pointer", root.transform);
             cursor.material = material; cursor.color = Color.cyan; cursor.raycastTarget = false;
             cursor.rectTransform.sizeDelta = new Vector2(16, 16);
-            var beam = new GameObject("Controller ray", typeof(LineRenderer));
-            beam.transform.SetParent(root.transform, false);
-            laser = beam.GetComponent<LineRenderer>();
-            laser.positionCount = 2; laser.useWorldSpace = true;
-            laser.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            laser.receiveShadows = false;
-            laser.sortingLayerID = panel.sortingLayerID;
-            laser.sortingOrder = panel.sortingOrder - 1;
-            // Use the UI shader so the depth override works, but render one queue
-            // before the panel so UI backgrounds/text composite over the beam.
-            laserMaterial = new Material(Graphic.defaultGraphicMaterial);
-            laserMaterial.mainTexture = Texture2D.whiteTexture;
-            laserMaterial.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent - 1;
-            laserMaterial.SetInt("unity_GUIZTestMode", (int)UnityEngine.Rendering.CompareFunction.Always);
-            laser.sharedMaterial = laserMaterial;
-            laser.startColor = laser.endColor = Color.cyan;
+            beam = new VrBeam(root.transform, panel.sortingLayerID, panel.sortingOrder);
+            laser = beam.Behind;
             cameraObject = new GameObject("WalkNWash_UI_Capture", typeof(Camera));
             UnityEngine.Object.DontDestroyOnLoad(cameraObject);
             capture = cameraObject.GetComponent<Camera>(); capture.enabled = false;
@@ -120,9 +116,15 @@ namespace WalkNWash.VRCompanion
                 }
                 root.transform.SetPositionAndRotation(backend.Rig.transform.TransformPoint(anchorPosition), backend.Rig.transform.rotation * anchorRotation);
                 root.transform.localScale = Vector3.one * (4.4f * backend.Rig.transform.localScale.x / Screen.width);
-                bool tracked = backend.Aim(out var hand, out var aim); // Aim also checks runtime focus.
-                UpdatePointer(new Ray(backend.Rig.transform.TransformPoint(hand), backend.Rig.transform.rotation * aim * Vector3.forward),
-                    tracked, backend.Rig.transform.lossyScale.x);
+                // Preserve all existing full-screen pointer behavior. Only plain
+                // rolling credits are passive; a real menu on EndScene is interactive.
+                bool passiveCredits = CreditsScene && !InteractiveMenu(CurrentMenu);
+                if (!passiveCredits && backend.Aim(out var hand, out var aim)) // Aim also checks runtime focus.
+                {
+                    UpdatePointer(new Ray(backend.Rig.transform.TransformPoint(hand), backend.Rig.transform.rotation * aim * Vector3.forward),
+                        true, backend.Rig.transform.lossyScale.x);
+                }
+                else UpdatePointer(default, false, backend.Rig.transform.lossyScale.x);
             }
             var left = Backend.Field(backend.Setup, "_leftVrCamera") as Camera;
             var right = Backend.Field(backend.Setup, "_rightVrCamera") as Camera;
@@ -133,16 +135,17 @@ namespace WalkNWash.VRCompanion
         }
         internal void Show(int layer)
         {
-            root.layer = picture.gameObject.layer = cursor.gameObject.layer = laser.gameObject.layer = layer;
+            root.layer = picture.gameObject.layer = cursor.gameObject.layer = layer;
             panel.enabled = true;
-            laser.enabled = laserRequested;
+            beam.Show(layer);
         }
         internal void UpdatePointer(Ray ray, bool tracked, float scale)
         {
             laserRequested = tracked;
+            beam.SetTracked(tracked);
             pointed = tracked && Point(ray, out pointer);
             cursor.enabled = pointed;
-            if (!tracked) { laser.enabled = false; return; }
+            if (!tracked) return;
             Vector3 end = ray.GetPoint(2 * scale);
             if (pointed)
             {
@@ -150,8 +153,7 @@ namespace WalkNWash.VRCompanion
                 cursor.rectTransform.anchoredPosition = local;
                 end = root.transform.TransformPoint(new Vector3(local.x, local.y, 0));
             }
-            laser.startWidth = laser.endWidth = .003f * scale;
-            laser.SetPosition(0, ray.origin); laser.SetPosition(1, end);
+            beam.Set(ray.origin, end, .003f * scale);
         }
         internal bool Point(Ray ray, out Vector2 pixels)
         {
@@ -219,18 +221,27 @@ namespace WalkNWash.VRCompanion
         // Native UI events run once in Update, never once per eye or during rendering.
         internal void Dispatch(Backend backend, bool allowed)
         {
-            if (!allowed || !Wanted || !backend.Focused || !anchored || sourceMenu != CurrentMenu || !sourceMenu || sourceMenu is MenuUnpaused || IntermissionFade.isRunning || !pointed || frame < Time.frameCount - 1)
+            if (!allowed || !Wanted || !backend.Focused || !anchored || sourceMenu != CurrentMenu || !InteractiveMenu(sourceMenu) || IntermissionFade.isRunning || !pointed || frame < Time.frameCount - 1)
             { CancelInput(); return; }
+            // Changing EventSystem cancels the trigger latch. Do that before sampling
+            // this frame's release so the first subsequent press is not discarded.
+            if (!PrepareEvents()) return;
             backend.Poll();
             bool held = trigger.Update(backend.RightTrigger, true);
             Send(pointer, pointed && frame >= Time.frameCount - 1, held);
         }
-        internal void Send(Vector2 position, bool valid, bool held)
+        private bool PrepareEvents()
         {
             var system = EventSystem.current;
-            if (!system) { CancelInput(); return; }
+            if (!system) { CancelInput(); return false; }
             if (data == null || eventSystem != system)
             { CancelInput(); eventSystem = system; data = new PointerEventData(system) { pointerId = -100, button = PointerEventData.InputButton.Left }; }
+            return true;
+        }
+        internal void Send(Vector2 position, bool valid, bool held)
+        {
+            if (!PrepareEvents()) return;
+            var system = eventSystem;
             data.delta = position - data.position; data.position = position;
             data.pointerCurrentRaycast = default;
             hits.Clear(); if (valid) system.RaycastAll(data, hits);
@@ -271,7 +282,7 @@ namespace WalkNWash.VRCompanion
             }
             down = null;
         }
-        internal void EndEye() { if (panel) panel.enabled = false; if (laser) laser.enabled = false; }
+        internal void EndEye() { if (panel) panel.enabled = false; beam?.EndEye(); }
         internal void Recenter() { anchored = false; }
         private void CancelInput()
         {
@@ -281,14 +292,15 @@ namespace WalkNWash.VRCompanion
         }
         internal void Reset()
         {
-            CancelInput(); pointed = anchored = laserRequested = false; frame = -1; EndEye();
+            CancelInput(); pointed = anchored = laserRequested = false; frame = -1; beam?.Clear(); EndEye();
         }
         public void Dispose()
         {
             Reset(); if (capture) capture.targetTexture = null;
             if (texture) { texture.Release(); UnityEngine.Object.Destroy(texture); }
+            beam?.Dispose();
             UnityEngine.Object.Destroy(root); UnityEngine.Object.Destroy(cameraObject); UnityEngine.Object.Destroy(material);
-            UnityEngine.Object.Destroy(laserMaterial);
+            beam = null; laser = null;
         }
     }
 }

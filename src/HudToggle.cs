@@ -8,7 +8,8 @@ namespace WalkNWash.VRCompanion
             => hand == 1 && (buttons & (1UL << OpenVrButton)) != 0;
         internal static string OpenXrPath(string profile)
             => profile == "oculus/touch_controller" ? "/user/hand/left/input/y/click"
-                : profile == "valve/index_controller" ? "/user/hand/left/input/b/click" : null;
+                : profile == "valve/index_controller" ? "/user/hand/left/input/b/click"
+                : profile == "htc/vive_controller" ? "/user/hand/left/input/menu/click" : null;
     }
 
     internal struct HudToggle

@@ -22,9 +22,8 @@ namespace WalkNWash.VRCompanion
         private readonly Harmony patches = new Harmony(Plugin.Id + ".hands");
         private readonly Dictionary<MonoBehaviour, ContactState> states = new Dictionary<MonoBehaviour, ContactState>();
         private readonly Dictionary<Transform, SavedTransform> toolRoots = new Dictionary<Transform, SavedTransform>();
-        private readonly Dictionary<ToolModel, ToolSway> toolSways = new Dictionary<ToolModel, ToolSway>();
-        private readonly ConfigEntry<bool> enabled, haptics, dunk, smoothSoap, diagnostics;
-        private readonly ConfigEntry<float> reach, probeRadius, extraSoapAmount, palmReachTilt;
+        private readonly ConfigEntry<bool> enabled, haptics, dunk, smoothSoap, diagnostics, triggerExtend;
+        private readonly ConfigEntry<float> reach, probeRadius, spongeRadius, extraSoapAmount, palmReachTilt, directReach, plapSpeed, plapRearmSpeed;
         private readonly ConfigEntry<Vector3> leftRotationOffset;
         private bool failed;
         private static readonly Dictionary<string, FieldInfo> fields = new Dictionary<string, FieldInfo>();
@@ -32,14 +31,24 @@ namespace WalkNWash.VRCompanion
         internal VrHands(Plugin host, ConfigFile config)
         {
             this.host = host; current = this;
-            grips = new ToolGrips(config);
+            grips = new ToolGrips(config, host.Roles.ToolOnLeft, host.Preferences);
             enabled = config.Bind("Hands", "Controller Hands", true, "Track idle hands/tools and aim active reach from each controller.");
-            palmReachTilt = config.Bind("Hands", "Left Palm Reach Tilt", 52.5f, new ConfigDescription("Left-hand active reach: degrees from the palm outward normal toward the fingers. 0 points straight out of palm; 90 follows fingers. Surface contact still wraps normally.", new AcceptableValueRange<float>(0, 90)));
-            reach = config.Bind("Hands", "Assisted Reach", 1.5f, new ConfigDescription("Maximum forward reach from the controller, also limited to 2 game units from the character eyes.", new AcceptableValueRange<float>(.1f, 2f)));
+            palmReachTilt = host.Preferences.Bind("Hands", "Left Palm Reach Tilt", 52.5f, new ConfigDescription("Free-hand active reach: degrees from the palm outward normal toward the fingers. 0 points straight out of palm; 90 follows fingers. Surface contact still wraps normally.", new AcceptableValueRange<float>(0, 90)));
+            reach = host.Preferences.Bind("Hands", "Hand Reach", 1.5f, new ConfigDescription("Maximum forward reach from the controller, also limited to 2 game units from the character eyes. Set to 0 for no forward extension.", new AcceptableValueRange<float>(0f, 2f)));
+            triggerExtend = host.Preferences.Bind("Hands", "Trigger Extend", true,
+                "Let the matching use trigger add assisted reach after physical contact misses.");
+            directReach = config.Bind("Hands", "Contact Use Reach", .06f,
+                new ConfigDescription("Physical contact reach in tracking-space metres.", new AcceptableValueRange<float>(0f, .15f)));
+            plapSpeed = config.Bind("Hands", "Contact Plap Speed", .75f,
+                new ConfigDescription("Inward palm speed required for a physical slap, in metres per second.", new AcceptableValueRange<float>(.2f, 3f)));
+            plapRearmSpeed = config.Bind("Hands", "Contact Plap Rearm Speed", .2f,
+                new ConfigDescription("Slow down below this inward speed to rearm a slap during contact.", new AcceptableValueRange<float>(0f, 1f)));
             probeRadius = config.Bind("Hands", "Contact Probe Radius", .045f, new ConfigDescription("Close-contact probe radius for hand/sponge rubbing.", new AcceptableValueRange<float>(0f, .1f)));
-            haptics = config.Bind("Hands", "Contact Haptics", true, "Brief feedback on contact and while rubbing.");
-            leftRotationOffset = config.Bind("Hands", "Left Hand Rotation Offset", new Vector3(15, 90, 90), "Local Euler correction for the left-hand mesh. Does not change controller aim or held tools; contact still aligns the palm to the surface.");
-            dunk = config.Bind("Hands", "Direct Sponge Dunk", true, "Hold right trigger and place the sponge near a refill target to use its original refill action.");
+            spongeRadius = config.Bind("Hands", "Sponge Contact Radius", .085f,
+                new ConfigDescription("Sponge contact volume in tracking meters when Trigger Extend is disabled, including side-on rubbing.", new AcceptableValueRange<float>(.02f, .15f)));
+            haptics = host.Preferences.Bind("Hands", "Contact Haptics", true, "Brief feedback on contact and while rubbing.");
+            leftRotationOffset = host.Preferences.Bind("Hands", "Left Hand Rotation Offset", new Vector3(15, 90, 90), "Reference correction for the free-hand mesh (mirrored when the free hand is right). Does not change held tools; contact still aligns the palm to the surface.");
+            dunk = config.Bind("Hands", "Direct Sponge Dunk", true, "Hold the tool-hand trigger and place the sponge near a refill target to use its original refill action.");
             smoothSoap = config.Bind("Hands", "Smooth Soap Strokes", true, "Fill gaps between consecutive sponge contacts on the same surface. Original supply drain and interaction events remain once per update.");
             extraSoapAmount = config.Bind("Hands", "Extra Soap Amount", .5f, new ConfigDescription("Total extra soap shared across all gap-filling stamps, relative to one native stamp. 0 disables extra stamps; 0.5 adds at most half a stamp per update.", new AcceptableValueRange<float>(0f, 2f)));
             diagnostics = config.Bind("Hands", "Sponge Diagnostics", false, "Log sponge update rate, missed contacts, unchanged controller positions and added soap stamps every three seconds while used.");
@@ -58,7 +67,7 @@ namespace WalkNWash.VRCompanion
                 Hook(typeof(ToolTest), "OnPlapStarted", nameof(BeforePlap));
                 Hook(typeof(ToolTest), "LateUpdate", nameof(BeforeTools), nameof(AfterTools));
                 Hook(typeof(ToolManager), "StartUseTool", nameof(BeforeToolStart));
-                host.HandLog("Controller hand hooks ready.");
+                host.HandLog("Controller hand hooks ready; physical contact active, Trigger Extend " + (triggerExtend.Value ? "enabled." : "disabled."));
             }
             catch (Exception e) { Fail(e); }
         }
@@ -72,13 +81,13 @@ namespace WalkNWash.VRCompanion
                 foreach (var root in toolRoots.Keys.Where(t => !t).ToArray()) toolRoots.Remove(root);
                 foreach (var state in states.Values)
                 {
-                    if (host.TryHandFrame(state.Hand, out _)) continue;
+                    if (!host.Calibrating && host.TryHandFrame(state.Hand, out _)) continue;
                     state.Using = state.PreviousValid = state.Valid = false;
-                    state.Stroke.Begin(false);
+                    state.Stroke.Begin(false); state.Contact.Reset(); state.Stabilizer.Reset(); state.Contacting = false;
                     state.ContactPhysics(false); state.Show(false);
                     Set(state.Model, "hitCollider", null); Set(state.Model, "splatted", false);
                 }
-                if (!host.TryHandFrame(2, out _))
+                if (!host.TryHandFrame(host.ToolHand, out _))
                 {
                     foreach (var root in toolRoots.Values) root.Show(false);
                 }
@@ -101,17 +110,17 @@ namespace WalkNWash.VRCompanion
         private static float Number(object obj, string name) => Convert.ToSingle(Backend.Field(obj, name));
         private sealed class SavedTransform
         {
-            internal readonly Vector3 Position;
+            internal readonly Vector3 Position, Scale;
             internal readonly Quaternion Rotation;
             private readonly Renderer[] renderers;
             private readonly bool[] visible;
             internal SavedTransform(Transform t)
             {
-                Position = t.localPosition; Rotation = t.localRotation;
+                Position = t.localPosition; Rotation = t.localRotation; Scale = t.localScale;
                 renderers = t.GetComponentsInChildren<Renderer>(true); visible = renderers.Select(r => r.enabled).ToArray();
             }
             internal void Show(bool show) { for (int i = 0; i < renderers.Length; i++) if (renderers[i]) renderers[i].enabled = show && visible[i]; }
-            internal void Restore(Transform t) { if (t) { t.localPosition = Position; t.localRotation = Rotation; Show(true); } }
+            internal void Restore(Transform t) { if (t) { t.localPosition = Position; t.localRotation = Rotation; t.localScale = Scale; Show(true); } }
         }
         private sealed class ContactState
         {
@@ -127,10 +136,12 @@ namespace WalkNWash.VRCompanion
             internal HandFrame Frame;
             internal HandHit Hit;
             internal Vector3 Previous, LastFeedback;
-            internal bool Valid, Using, PreviousValid;
+            internal bool Valid, Using, PreviousValid, Contacting;
             internal float Blend, NextFeedback, NextDunk;
             internal int LastFrame = -1, Hand;
+            internal readonly ContactDrivenUse Contact = new ContactDrivenUse();
             internal readonly SpongeStroke Stroke = new SpongeStroke();
+            internal readonly ContactStabilizer Stabilizer = new ContactStabilizer();
             internal int Samples, Contacts, Unchanged, ExtraStamps;
             internal float DiagnosticStart;
             internal void Show(bool visible)
@@ -151,7 +162,7 @@ namespace WalkNWash.VRCompanion
             if (states.TryGetValue(model, out var value)) return value;
             var visual = (Transform)Backend.Field(model, model is PlapperHand ? "hand" : "sponge");
             value = new ContactState { Model = model, Visual = visual, Original = new SavedTransform(visual),
-                Hand = model is PlapperHand ? 1 : 2, Renderers = visual.GetComponentsInChildren<Renderer>(true) };
+                Hand = model is PlapperHand ? host.FreeHand : host.ToolHand, Renderers = visual.GetComponentsInChildren<Renderer>(true) };
             value.RendererEnabled = value.Renderers.Select(r => r.enabled).ToArray();
             value.Colliders = visual.GetComponentsInChildren<Collider>(true);
             value.ColliderEnabled = value.Colliders.Select(c => c.enabled).ToArray();
@@ -169,10 +180,10 @@ namespace WalkNWash.VRCompanion
             if (self == null || !self.Active) { self?.Restore(model); return true; }
             // Only the equipped sponge is controlled, never the placed/refill model.
             if (model is ToolModel && CurrentToolModel() != model) return true;
-            try { self.Update(model, active); return false; }
+            try { self.Update(model, active, Time.unscaledTime, Time.deltaTime); return false; }
             catch (Exception e) { self.Fail(e); return true; }
         }
-        private void Update(MonoBehaviour model, bool active)
+        internal void Update(MonoBehaviour model, bool requested, float now, float deltaTime)
         {
             var state = State(model);
             if (state.LastFrame == Time.frameCount) return;
@@ -180,32 +191,59 @@ namespace WalkNWash.VRCompanion
             state.Valid = host.TryHandFrame(state.Hand, out state.Frame);
             if (state.Valid && model is ToolModel)
                 state.Frame = grips.Apply(ToolManager.GetCurrentTool()?.name, state.Frame, host.HandScale);
-            if (state.Valid && state.Hand == 1) state.Frame.Direction = LeftReachDirection(state.Frame.Rotation);
-            active &= state.Valid && !host.Calibrating;
+            if (state.Valid && model is PlapperHand) state.Frame.Direction = FreeHandReachDirection(state.Frame.Rotation);
+            bool usable = state.Valid && !host.Calibrating;
+            bool physical = false, plap = false;
+            state.Hit = new HandHit { Point = state.Frame.Position, Normal = -(state.Frame.Rotation * Vector3.forward) };
+            state.QueryColliders(false);
+            try
+            {
+                if (usable)
+                {
+                    var direct = state.Frame;
+                    direct.Direction = direct.Rotation * (model is PlapperHand ? FreeRotation : Quaternion.identity) * Vector3.forward;
+                    float scale = Mathf.Max(.01f, Mathf.Abs(host.HandScale));
+                    state.Hit = state.Contact.Probe(direct, host.HandRig, host.HandBodyEye,
+                        directReach.Value * scale, (model is ToolModelSponge && !triggerExtend.Value ? spongeRadius.Value : probeRadius.Value) * scale, now,
+                        plapSpeed.Value, plapRearmSpeed.Value, out plap);
+                    physical = state.Hit.Collider != null;
+                    if (!physical && requested && triggerExtend.Value)
+                        state.Hit = HandContact.Find(state.Frame, host.HandBodyEye, state.Previous, state.PreviousValid,
+                            reach.Value, probeRadius.Value);
+                }
+                else state.Contact.Reset();
+            }
+            finally { state.ContactPhysics(state.Valid); }
+
+            bool active = usable && (physical || (requested && triggerExtend.Value));
             state.Stroke.Begin(active && smoothSoap.Value);
-            if (!active || !state.Using) Set(model, "splatted", false);
+            if (physical && model is PlapperHand) Set(model, "splatted", !plap);
+            else if (model is ToolModelSponge) Set(model, "splatted", state.Contacting && state.Hit.Collider != null);
+            else if (!active || !state.Using) Set(model, "splatted", false);
             state.Using = active;
-            state.QueryColliders(false); // Exclude our own physics shapes without unregistering passive jiggle contact.
-            state.Blend = Mathf.MoveTowards(state.Blend, active ? 1 : 0, Time.deltaTime * (active ? 20 : 8));
-            state.Hit = active ? HandContact.Find(state.Frame, host.HandBodyEye, state.Previous, state.PreviousValid,
-                reach.Value, probeRadius.Value) : new HandHit { Point = state.Frame.Position, Normal = -(state.Frame.Rotation * Vector3.forward) };
-            // Vanilla keeps passive hand/jiggle contact enabled even at rest.
-            // Tracking loss still disables it, and idle gameplay targets stay cleared.
-            state.ContactPhysics(state.Valid);
+            state.Contacting = active && state.Hit.Collider != null;
+            // Physical contact is immediate. Assisted reach retains its progress across frames.
+            state.Blend = physical ? 1f : active ? Mathf.MoveTowards(state.Blend, 1f, deltaTime * 20f) : 0f;
+            if (!active) state.Hit = new HandHit { Point = state.Frame.Position, Normal = -(state.Frame.Rotation * Vector3.forward) };
             bool unchanged = state.PreviousValid && Vector3.SqrMagnitude(state.Previous - state.Frame.Position) < .00000001f;
-            state.Previous = state.Frame.Position; state.PreviousValid = state.Valid && active;
+            state.Previous = state.Frame.Position; state.PreviousValid = usable && active;
             Set(model, "lookOffset", Vector2.zero);
             Set(model, "usingT", state.Blend);
             Set(model, "hitCollider", active ? state.Hit.Collider : null);
             Set(model, "raycastTarget", state.Visual.parent.InverseTransformPoint(state.Hit.Point));
             Quaternion rotation = VisualRotation(state);
+            Vector3 presentationPoint = state.Hit.Point;
+            Quaternion presentationRotation = rotation;
+            if (physical)
+                state.Stabilizer.Apply(state.Hit, state.Visual.parent, deltaTime, ref presentationPoint, ref presentationRotation);
+            else state.Stabilizer.Reset();
             Set(model, "raycastTargetRotation", Quaternion.Inverse(state.Visual.parent.rotation) * rotation);
             state.Show(state.Valid);
             string method = model is PlapperHand ? "UpdatePlapper" : "UpdateSponge";
             AccessTools.Method(model.GetType(), method).Invoke(model, null);
             if (model is ToolModelSponge)
             {
-                if (active && dunk.Value) TryDunk(state);
+                if (usable && requested && dunk.Value) TryDunk(state);
                 AccessTools.Method(model.GetType(), "UpdateAnimatorFillAmount").Invoke(model, null);
                 if (diagnostics.Value && active)
                 {
@@ -233,7 +271,7 @@ namespace WalkNWash.VRCompanion
             // plapper_L fingers run along local +Y; its contact palm faces +Z.
             // Correct mesh basis; active left reach uses this same palm/finger basis.
             Quaternion wrist = state.Frame.Rotation;
-            if (state.Hand == 1) wrist *= Quaternion.Euler(leftRotationOffset.Value);
+            if (state.Model is PlapperHand) wrist *= FreeRotation;
             return state.Hit.Collider ? HandContact.SurfaceRotation(state.Hit.Normal, wrist) : wrist;
         }
         // Injected before the original visual transform block. The native contact/effect tail remains.
@@ -243,8 +281,14 @@ namespace WalkNWash.VRCompanion
             if (!s.Valid) return true;
             var rotation = current.VisualRotation(s);
             Vector3 position = Vector3.Lerp(s.Frame.Position, s.Hit.Point, s.Blend);
+            if (s.Contacting && s.Stabilizer.TryPose(out var surfacePoint, out var surfaceRotation))
+            { position = surfacePoint; rotation = surfaceRotation; }
             var curve = (AnimationCurve)Backend.Field(model, model is PlapperHand ? "plapNormalOffset" : "spongeNormalOffset");
-            if (s.Using && curve != null) position += rotation * Vector3.back * curve.Evaluate(s.Blend) * .2f;
+            if (s.Using && curve != null)
+                position += HandContact.VisualOffset(s.Visual.parent, rotation, curve.Evaluate(s.Blend) * .2f,
+                    s.Contacting && s.Blend >= .999f);
+            if (model is PlapperHand)
+                s.Visual.localScale = Vector3.Scale(s.Original.Scale, current.host.Roles.ToolOnLeft ? new Vector3(-1, 1, 1) : Vector3.one);
             s.Visual.SetPositionAndRotation(position, rotation);
             return true;
         }
@@ -301,6 +345,8 @@ namespace WalkNWash.VRCompanion
         {
             if (current != null && current.Active && model is ToolModelSponge && current.states.TryGetValue(model, out var state))
             {
+                // Stamp on the detected skin, not the model's decorative normal offset.
+                if (state.Hit.Collider) contact.position = state.Hit.Point;
                 state.Contacts++;
                 if (current.smoothSoap.Value) { state.ExtraStamps += state.Stroke.Emit(fluid, contact, current.extraSoapAmount.Value); return; }
             }
@@ -343,13 +389,15 @@ namespace WalkNWash.VRCompanion
             }
             catch (Exception e) { current.Fail(e); return true; }
         }
-        internal ConfigEntry<float> AssistedReach => reach;
-        internal Vector3 LeftReachDirection(Quaternion controllerRotation)
-            => HandContact.PalmDirection(controllerRotation, Quaternion.Euler(leftRotationOffset.Value), palmReachTilt.Value);
+        private Quaternion FreeRotation => host.Roles.ToolOnLeft
+            ? MirrorRotation(Quaternion.Euler(leftRotationOffset.Value)) : Quaternion.Euler(leftRotationOffset.Value);
+        internal static Quaternion MirrorRotation(Quaternion q) => new Quaternion(q.x, -q.y, -q.z, q.w);
+        internal Vector3 FreeHandReachDirection(Quaternion controllerRotation)
+            => HandContact.PalmDirection(controllerRotation, FreeRotation, palmReachTilt.Value);
         private Interactable FindInteractable(Tool tool)
         {
-            if (!host.TryHandFrame(1, out var frame)) return null;
-            frame.Direction = LeftReachDirection(frame.Rotation);
+            if (!host.TryHandFrame(host.FreeHand, out var frame)) return null;
+            frame.Direction = FreeHandReachDirection(frame.Rotation);
             var list = AccessTools.Field(typeof(Interactable), "_interactables").GetValue(null) as IEnumerable;
             Interactable best = null; float score = 0;
             if (list == null) return null;
@@ -403,7 +451,7 @@ namespace WalkNWash.VRCompanion
                 var tool = ToolManager.GetCurrentTool();
                 if (!(bool)AccessTools.Method(item.GetType(), "CanInteract").Invoke(item, new object[] { tool })) continue;
                 item.Interact(tool); state.NextDunk = Time.unscaledTime + .5f;
-                if (haptics.Value) host.HandPulse(2, .35f);
+                if (haptics.Value) host.HandPulse(host.ToolHand, .35f);
                 break;
             }
         }
@@ -415,15 +463,17 @@ namespace WalkNWash.VRCompanion
             try
             {
                 var manager = Backend.Field(__instance, "_toolManager");
-                bool left = (bool)Backend.Field(__instance, "_plapperDown") && current.host.TryHandFrame(1, out _);
-                bool right = (bool)Backend.Field(manager, "_useButtonDown") && current.host.TryHandFrame(2, out _);
-                current.host.HandInteraction(left || right);
+                bool freeUsing = current.states.Values.Any(s => s.Model is PlapperHand && s.Model && s.Model.gameObject.activeInHierarchy && s.Valid && s.Using);
+                bool toolUsing = (bool)Backend.Field(manager, "_useButtonDown") && current.host.TryHandFrame(current.host.ToolHand, out _);
+                var model = CurrentToolModel();
+                bool spongeUsing = model is ToolModelSponge && current.states.TryGetValue(model, out var state) && state.Valid && state.Using;
+                current.host.HandInteraction(freeUsing || toolUsing || spongeUsing);
             }
             catch (Exception e) { current.Fail(e); }
         }
         private static bool BeforeScreenMove(ToolModelScreenMovable __instance)
         {
-            if (current == null || !current.Active || !current.host.TryHandFrame(2, out _)) return true;
+            if (current == null || !current.Active || !current.host.TryHandFrame(current.host.ToolHand, out _)) return true;
             Set(__instance, "lookOffset", Vector2.zero);
             return false; // Tracked sprayer must not rotate the camera through desktop motion assistance.
         }
@@ -433,21 +483,9 @@ namespace WalkNWash.VRCompanion
             try
             {
                 var model = CurrentToolModel();
-                foreach (var old in toolSways.Keys.Where(m => !m || m != model).ToArray())
-                { toolSways[old]?.Restore(); toolSways.Remove(old); }
-                if (model)
-                {
-                    if (!toolSways.TryGetValue(model, out var sway))
-                    {
-                        try { sway = ToolSway.Create(model.transform); }
-                        catch (Exception e) { host.HandLog("Tool sway correction unavailable for " + model.name + ": " + e.Message); }
-                        toolSways[model] = sway;
-                    }
-                    if (host.TryHandFrame(2, out _)) sway?.Apply(); else sway?.Restore();
-                }
                 if (!model || model is ToolModelSponge) return;
                 if (!toolRoots.ContainsKey(model.transform)) toolRoots.Add(model.transform, new SavedTransform(model.transform));
-                bool valid = host.TryHandFrame(2, out var frame);
+                bool valid = host.TryHandFrame(host.ToolHand, out var frame);
                 toolRoots[model.transform].Show(valid);
                 if (valid)
                 {
@@ -461,10 +499,10 @@ namespace WalkNWash.VRCompanion
         internal bool DiagnosticPose(int hand, out Vector3 target, out Transform visual, out bool usingHand, out Bounds bounds)
         {
             target = default; visual = null; usingHand = false; bounds = default;
-            var equipped = hand == 2 ? CurrentToolModel() : null;
-            if (hand == 2 && equipped && !(equipped is ToolModelSponge))
+            var equipped = hand == host.ToolHand ? CurrentToolModel() : null;
+            if (hand == host.ToolHand && equipped && !(equipped is ToolModelSponge))
             {
-                if (!host.TryHandFrame(2, out var frame)) return false;
+                if (!host.TryHandFrame(host.ToolHand, out var frame)) return false;
                 frame = grips.Apply(ToolManager.GetCurrentTool()?.name, frame, host.HandScale);
                 target = frame.Position; visual = equipped.transform; usingHand = frame.Trigger > .35f;
                 bounds = new Bounds(visual.position, Vector3.zero);
@@ -478,7 +516,7 @@ namespace WalkNWash.VRCompanion
             }
             foreach (var state in states.Values)
             {
-                if (state.Hand != hand || (hand == 2 && state.Model != equipped)) continue;
+                if (state.Hand != hand || (hand == host.ToolHand && state.Model != equipped)) continue;
                 if (!(state.Model is PlapperHand) && !(state.Model is ToolModelSponge)) continue;
                 if (!state.Model || !state.Model.isActiveAndEnabled || !state.Valid || !state.Visual || state.LastFrame < Time.frameCount - 1) continue;
                 target = state.Frame.Position; visual = state.Visual; usingHand = state.Using || state.Blend > .001f;
@@ -506,15 +544,14 @@ namespace WalkNWash.VRCompanion
                     if (!state.Model || !host.TryHandFrame(state.Hand, out var frame)) continue;
                     if (state.Model is ToolModel)
                         frame = grips.Apply(ToolManager.GetCurrentTool()?.name, frame, host.HandScale);
-                    if (state.Hand == 1) frame.Direction = LeftReachDirection(frame.Rotation);
+                    if (state.Model is PlapperHand) frame.Direction = FreeHandReachDirection(frame.Rotation);
                     state.Frame = frame;
                     if (!state.Using) state.Hit = new HandHit { Point = frame.Position, Normal = -(frame.Rotation * Vector3.forward) };
                     PlaceVisual(state.Model);
                 }
-                // Roots follow the controller after native parent motion. Sway is
-                // applied before the contact visuals, not again on top of a sponge.
+                // Roots follow the controller after native parent motion.
                 var model = CurrentToolModel();
-                if (model && !(model is ToolModelSponge) && host.TryHandFrame(2, out var right))
+                if (model && !(model is ToolModelSponge) && host.TryHandFrame(host.ToolHand, out var right))
                 {
                     right = grips.Apply(ToolManager.GetCurrentTool()?.name, right, host.HandScale);
                     model.transform.SetPositionAndRotation(right.Position, right.Rotation);
@@ -530,8 +567,6 @@ namespace WalkNWash.VRCompanion
         }
         internal void RestoreAll()
         {
-            foreach (var sway in toolSways.Values) sway?.Restore();
-            toolSways.Clear();
             foreach (var model in states.Keys.ToArray()) Restore(model);
             foreach (var root in toolRoots) root.Value.Restore(root.Key);
             toolRoots.Clear();

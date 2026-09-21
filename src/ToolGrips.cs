@@ -12,19 +12,20 @@ namespace WalkNWash.VRCompanion
             internal ConfigEntry<Vector3> Position, Rotation;
         }
         private readonly ConfigFile config;
+        private readonly bool leftHand;
         private string previewName;
         private Vector3 previewPosition, previewRotation;
         private readonly Dictionary<string, Grip> grips = new Dictionary<string, Grip>(StringComparer.OrdinalIgnoreCase);
-        internal ToolGrips(ConfigFile config)
+        internal ToolGrips(ConfigFile config, bool leftHand = false, UserSettings preferences = null)
         {
-            this.config = config;
+              this.config = config; this.leftHand = leftHand;
             Add(config, "Crowbar", new Vector3(-0.0342881307f, 0.24586384f, 0.965012908f), new Vector3(54.5247231f, 23.2106266f, 25.0203285f));
             Add(config, "Sponge", new Vector3(0.0389792733f, -0.0409567505f, 0.115976587f), new Vector3(345.411774f, 107.809669f, 340.888824f));
             Add(config, "Sprayer", new Vector3(0.00093032961f, -0.127666786f, -0.210475251f), new Vector3(12.1314287f, 0.486448586f, 3.46904159f));
             Add(config, "Medkit", new Vector3(0.205404297f, -0.443058491f, 0.158783212f), new Vector3(348.631439f, 4.31504822f, 18.4467945f));
             Add(config, "Spinner", new Vector3(-0.0161585025f, 0.0383101068f, -0.250951409f), new Vector3(11.1664686f, 358.667908f, 355.184235f));
             Add(config, "Footstool", new Vector3(0.583419204f, 0.089880392f, -0.188502014f), new Vector3(15.8011942f, 6.94211292f, 10.5628586f));
-            Add(config, "Bucket", new Vector3(-0.148726374f, -0.248128131f, -0.103323728f), new Vector3(25.53438f, 339.674805f, 352.01236f));
+            Add(config, "Bucket", new Vector3(-0.148726374f, -0.248128131f, -0.103323728f), new Vector3(25.53438f, 339.674805f, 352.01236f), new Vector3(-0.1193612664937973f, -0.23179666697978974f, 0.02321871556341648f), new Vector3(8.960824966430664f, 2.7602427005767824f, 345.0353088378906f));
             Add(config, "ForestDebris", new Vector3(0.0570607111f, -0.0585235357f, 0.133772641f), new Vector3(296.980011f, 272.755127f, 17.650856f));
             Add(config, "Shoes", new Vector3(-0.102862097f, -0.231017902f, 0.132335752f), new Vector3(339.169769f, 248.59642f, 315.063538f));
             Add(config, "Onahole", new Vector3(-0.0143391201f, 0.0319253877f, 0.0489587039f), new Vector3(339.53067f, 1.54010057f, 314.164276f));
@@ -35,15 +36,41 @@ namespace WalkNWash.VRCompanion
             Add(config, "Watermelon", new Vector3(0.0477282405f, -0.295647591f, 0.170653269f), new Vector3(333.806183f, 264.036804f, 96.0563354f));
             Add(config, "Grapes", new Vector3(-0.253058314f, 0.282903582f, 0.678214431f), new Vector3(293.913635f, 182.07695f, 285.366882f));
         }
-        private void Add(ConfigFile config, string name, Vector3 position, Vector3 rotation)
+        private void Add(ConfigFile config, string name, Vector3 position, Vector3 rotation, Vector3? leftPosition = null, Vector3? leftRotation = null)
         {
-            grips.Add(name, new Grip {
-                Position = config.Bind("Tool Grips", name + " Position", position,
-                    "Controller-local offset in meters before VR scaling: X right, Y up, Z forward. Sprayer is the water gun; Footstool is the small ladder."),
-                Rotation = config.Bind("Tool Grips", name + " Rotation", rotation,
-                    "Local Euler degrees: X pitch, Y yaw, Z roll. Applies only to this equipped tool.")
-            });
+    if (leftHand)
+    {
+        if (leftPosition.HasValue && leftRotation.HasValue)
+        {
+            position = leftPosition.Value;
+            rotation = leftRotation.Value;
         }
+        else
+        {
+            position.x = -position.x;
+            rotation = VrHands.MirrorRotation(
+                Quaternion.Euler(rotation)
+            ).eulerAngles;
+        }
+    }
+
+    string section = leftHand ? "Tool Grips Left" : "Tool Grips";
+
+    var grip = new Grip {
+        Position = config.Bind(
+            section,
+            name + " Position",
+            position,
+            "Controller-local offset in meters before VR scaling: X right, Y up, Z forward. Sprayer is the water gun; Footstool is the small ladder."),
+        Rotation = config.Bind(
+            section,
+            name + " Rotation",
+            rotation,
+            "Local Euler degrees: X pitch, Y yaw, Z roll. Applies only to this equipped tool.")
+    };
+
+    grips.Add(name, grip);
+}
         internal void Read(string name, out Vector3 position, out Vector3 rotation, bool defaults = false)
         {
             if (!grips.TryGetValue(name, out var grip)) { Add(config, name, Vector3.zero, Vector3.zero); grip = grips[name]; }

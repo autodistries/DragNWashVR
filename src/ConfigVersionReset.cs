@@ -32,6 +32,8 @@ namespace WalkNWash.VRCompanion
                 string currentVersion = GetPluginVersion();
                 if (string.IsNullOrEmpty(currentVersion)) return;
 
+                string configPath = Path.Combine(configDirectory, Plugin.Id + ".cfg");
+
                 string markerPath = Path.Combine(configDirectory, Plugin.Id + ".version");
                 string previousVersion = File.Exists(markerPath)
                     ? File.ReadAllText(markerPath).Trim()
@@ -41,18 +43,9 @@ namespace WalkNWash.VRCompanion
                     return;
 
                 Directory.CreateDirectory(configDirectory);
-                string configPath = Path.Combine(configDirectory, Plugin.Id + ".cfg");
-
                 if (File.Exists(configPath))
                 {
-                    try
-                    {
-                        File.Copy(configPath, configPath + ".bak", true);
-                    }
-                    catch (Exception e)
-                    {
-                        Console.Error.WriteLine("Walk N Wash VR Companion config backup failed: " + e.Message);
-                    }
+                    File.Copy(configPath, configPath + ".bak", true);
 
                     // BaseUnityPlugin has not constructed its ConfigFile yet, so
                     // truncating here guarantees later Config.Bind calls see no
@@ -61,7 +54,7 @@ namespace WalkNWash.VRCompanion
                 }
 
                 // Write the marker only after the reset succeeds. If this write
-                // fails, the next launch safely attempts the migration again.
+                // fails, the next launch safely attempts the reset again.
                 File.WriteAllText(markerPath, currentVersion);
 
                 Console.WriteLine(
@@ -71,13 +64,13 @@ namespace WalkNWash.VRCompanion
             }
             catch (Exception e)
             {
-                // A config migration failure must never prevent the plugin assembly
-                // from loading. Leave the marker unchanged so a later run can retry.
+                // A config reset failure must never prevent the plugin assembly
+                // from loading. Leave the marker unchanged so a later run can retry the reset.
                 Console.Error.WriteLine("Walk N Wash VR Companion config reset failed: " + e.Message);
             }
         }
 
-        private static string GetPluginVersion()
+        internal static string GetPluginVersion()
         {
             // Read the third BepInPlugin constructor argument directly from
             // attribute metadata. Accessing BepInPlugin.Version here would make

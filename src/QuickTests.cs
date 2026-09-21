@@ -23,9 +23,11 @@ namespace WalkNWash.VRCompanion
         internal static bool Sample { get; private set; }
         internal static bool NoSaving { get; private set; }
         internal static bool AllowSave() => !NoSaving;
+        internal QuickTests() => DebugAccess.Initialize(typeof(QuickTests).Assembly.Location);
         internal void Tick(Backend backend, bool usable)
         {
-            if (false && Keyboard.current != null && Keyboard.current.f5Key.wasPressedThisFrame)
+            if (!DebugAccess.Enabled) { Close(); return; }
+            if (Keyboard.current != null && Keyboard.current.f5Key.wasPressedThisFrame)
             {
                 if (Active) Close();
                 else if (usable) { Active = true; armed = false; panel.Recenter(); }

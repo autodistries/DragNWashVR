@@ -124,7 +124,8 @@ namespace WalkNWash.VRCompanion
                 if (!backend.HeadPose(out var head, out var rotation)) { Reset(); return; }
                 panel.Present(body, speaker, body != null ? body.text : "", visibleCharacters, choices,
                     advancer != null && advancer.isActiveAndEnabled && !showOptions, line?.characterNameText);
-                panel.Place(backend.Rig.transform, head, rotation, width, distance);
+                panel.Place(backend.Rig.transform, head, rotation, width, distance,
+                    UserSettings.DialogueFollowsView != null && UserSettings.DialogueFollowsView.Value);
                 presented = true;
                 backend.Poll();
                 Vector3 hand = Vector3.zero;

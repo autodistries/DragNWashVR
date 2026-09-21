@@ -20,6 +20,7 @@ namespace WalkNWash.VRCompanion
         internal HandDiagnostics(Action<string> log, int hand = 1) { this.log = log; this.hand = hand; }
         internal void Toggle()
         {
+            if (!DebugAccess.Enabled) return;
             enabled = !enabled; Recenter(); EndEye();
             log("Hand diagnostics " + (hand == 1 ? "left " : "right ") + (enabled ? "ON: cyan controller, yellow target, magenta wrist/tool pivot. Release triggers; F10 resets baseline." : "OFF."));
         }
